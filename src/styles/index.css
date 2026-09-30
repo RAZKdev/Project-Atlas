@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: #121110;
+    color: #EAE2D7;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, .font-serif {
+    font-family: 'Playfair Display', Georgia, serif;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #141312;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #332E2A;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #543D2A;
+}
+
+/* Print Styles for Passport / Field Journal Dossier */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 1.5cm;
+  }
+
+  body {
+    background-color: #FAF8F5 !important;
+    color: #1E1D1B !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide app navigation and footer during print */
+  header, footer, nav, .print\:hidden {
+    display: none !important;
+  }
+
+  /* Force page breaks where needed */
+  .print\:page-break-after-always {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .print\:break-inside-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+
