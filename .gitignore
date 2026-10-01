@@ -23,3 +23,7 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 *.swp
+
+# Internal Documentation & Prompts (Exclude all .md except README.md)
+*.md
+!README.md

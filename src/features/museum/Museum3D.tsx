@@ -1,22 +1,29 @@
 /**
  * Museum3D.tsx
- * Interactive First-Person 3D Mini Museum — "195 Negara, 1 Cerita"
+ * Interactive Multi-POV 3D Mini Museum — "195 Negara, 1 Cerita"
  *
- * Architecture:
- * - Human Canonical Scale: 1 unit = 1 meter
- * - Kinematic First-Person Player Controller (Avatar 1.70m, Eye level 1.60m)
- * - Independent X/Z AABB collision resolution with natural wall-sliding
- * - Accurate 6x8m Architectural Shell with raised foundation and entrance steps
- * - 6 Curated Exhibition Zones with rich PBR materials and procedural animations
- * - Center-screen raycasting with dynamic crosshair and [E] prompt
- * - Dual Mode: Walkthrough (First-Person) & Diorama (Exterior Orbit)
- * - Touch Virtual Joystick & swipe-look controls for mobile devices
- * - WebGL context loss handling and quality settings
+ * Architecture & Upgrades:
+ * - Decoupled Authoritative Player Entity (PlayerEntity): height 1.70m, radius 0.28m, eye 1.60m
+ * - Decoupled Three-POV Camera System (CameraSystem):
+ *   * POV 1: First-Person (Eye level 1.60m, FOV 72°, direct head attachment)
+ *   * POV 2: Third-Person Character (Distance ~2.2m, height 1.80m, shoulder offset, wall-collision-aware)
+ *   * POV 3: Cinematic Architectural (Distance ~4.4m, height 2.50m, wide panoramic view, wall-collision-aware)
+ * - 1.70m Human Explorer Avatar (AvatarRenderer):
+ *   * Fedora hat, brass goggles, expedition coat, leather satchel, limbs with procedural walking animation
+ *   * Hidden in POV 1, visible in POV 2 & POV 3
+ * - Strict Scoped Input Handling:
+ *   * ZERO global window click hijacking
+ *   * Pointer lock requested ONLY via canvas click in active simulation
+ *   * In-simulation Pause Menu (ESC or button) with clean exit back to Museum Page
+ * - Responsive Mobile Controls (virtual joystick, swipe look, jump, inspect, POV cycle)
+ * - 6 Curated Exhibition Zones with rich PBR materials, procedural animations, and fast travel
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { PlayerController } from './museumEngine/playerController';
+import { PlayerEntity } from './museumEngine/playerEntity';
+import { CameraSystem } from './museumEngine/cameraSystem';
 import { buildMuseumArchitecture } from './museumEngine/museumArchitecture';
 import { buildMuseumExhibits } from './museumEngine/museumExhibits';
 import { buildMuseumLighting } from './museumEngine/museumLighting';
@@ -25,15 +32,27 @@ import {
   type InteractableExhibit,
   type MuseumViewMode,
   type MuseumQualityTier,
+  type POVMode,
 } from './museumEngine/types';
 import { ExhibitModal } from './ExhibitModal';
 
-interface Museum3DProps {
+export interface Museum3DProps {
   onSelectCountry?: (countryCode: string) => void;
   onZoneSelect?: (exhibit: InteractableExhibit) => void;
+  onExitSimulation?: () => void;
 }
 
-export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelect }) => {
+const POV_LABELS: Record<POVMode, { name: string; icon: string; short: string }> = {
+  first_person: { name: 'POV 1: First-Person (Mata)', icon: '👁️', short: 'FPS' },
+  third_person: { name: 'POV 2: Karakter (Pundak)', icon: '🧍', short: 'Karakter' },
+  cinematic: { name: 'POV 3: Sinematik (Luas)', icon: '🎥', short: 'Sinematik' },
+};
+
+export const Museum3D: React.FC<Museum3DProps> = ({
+  onSelectCountry,
+  onZoneSelect,
+  onExitSimulation,
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -41,7 +60,9 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const playerRef = useRef<PlayerController | null>(null);
+  const playerRef = useRef<PlayerEntity | null>(null);
+  const cameraSysRef = useRef<CameraSystem | null>(null);
+  const controllerRef = useRef<PlayerController | null>(null);
   const collidersRef = useRef<CollisionBox[]>([]);
   const exhibitsRef = useRef<InteractableExhibit[]>([]);
   const updateExhibitsRef = useRef<((delta: number) => void) | null>(null);
@@ -67,13 +88,23 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
 
   // UI state
   const [viewMode, setViewMode] = useState<MuseumViewMode>('walkthrough');
+  const [currentPOV, setCurrentPOV] = useState<POVMode>('first_person');
   const [isPointerLocked, setIsPointerLocked] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [focusedExhibit, setFocusedExhibit] = useState<InteractableExhibit | null>(null);
   const [activeModalExhibit, setActiveModalExhibit] = useState<InteractableExhibit | null>(null);
   const [quality, setQuality] = useState<MuseumQualityTier>('high');
   const [isMobile, setIsMobile] = useState(false);
   const [webglError, setWebglError] = useState<string | null>(null);
   const [headBobEnabled, setHeadBobEnabled] = useState(true);
+
+  // Mutable refs for event handlers to avoid stale closures
+  const isPausedRef = useRef(false);
+  isPausedRef.current = isPaused;
+  const activeModalExhibitRef = useRef<InteractableExhibit | null>(null);
+  activeModalExhibitRef.current = activeModalExhibit;
+  const viewModeRef = useRef<MuseumViewMode>('walkthrough');
+  viewModeRef.current = viewMode;
 
   // Mobile virtual joystick refs
   const joystickTouchIdRef = useRef<number | null>(null);
@@ -97,7 +128,6 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
   // ── Open Exhibit Detail ───────────────────────────────────────────────────
   const openExhibitDetail = useCallback(
     (exhibit: InteractableExhibit) => {
-      // Release pointer lock when opening modal
       if (document.pointerLockElement) {
         document.exitPointerLock();
       }
@@ -107,6 +137,13 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
     [onZoneSelect]
   );
 
+  // ── Cycle POV ─────────────────────────────────────────────────────────────
+  const cyclePOV = useCallback(() => {
+    if (!cameraSysRef.current) return;
+    const next = cameraSysRef.current.cyclePOV();
+    setCurrentPOV(next);
+  }, []);
+
   // ── Teleport to Zone ──────────────────────────────────────────────────────
   const teleportToZone = useCallback(
     (exhibitId: string) => {
@@ -114,27 +151,22 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
       const exhibits = exhibitsRef.current;
       if (!player) return;
 
-      const targetExhibit = exhibits.find((e) => e.id === exhibitId);
-      if (targetExhibit && targetExhibit.viewPosition && targetExhibit.viewTarget) {
-        const vp = targetExhibit.viewPosition;
-        const vt = targetExhibit.viewTarget;
-
-        // Calculate yaw pointing towards viewTarget
-        const dx = vt[0] - vp[0];
-        const dz = vt[2] - vp[2];
-        const targetYaw = Math.atan2(-dx, -dz);
-
-        player.teleport(vp[0], 0.50, vp[2], targetYaw, 0);
-
-        if (viewMode === 'diorama') {
-          setViewMode('walkthrough');
+      if (exhibitId === 'entrance') {
+        player.teleport(0, 0.50, 5.2, Math.PI, 0);
+      } else {
+        const targetExhibit = exhibits.find((e) => e.id === exhibitId);
+        if (targetExhibit && targetExhibit.viewPosition && targetExhibit.viewTarget) {
+          const vp = targetExhibit.viewPosition;
+          const vt = targetExhibit.viewTarget;
+          const dx = vt[0] - vp[0];
+          const dz = vt[2] - vp[2];
+          const targetYaw = Math.atan2(-dx, -dz);
+          player.teleport(vp[0], 0.50, vp[2], targetYaw, 0);
         }
-      } else if (exhibitId === 'entrance') {
-        // Outside entrance facing inward
-        player.teleport(0, 0.50, 5.4, Math.PI, 0);
-        if (viewMode === 'diorama') {
-          setViewMode('walkthrough');
-        }
+      }
+
+      if (viewMode === 'diorama') {
+        setViewMode('walkthrough');
       }
     },
     [viewMode]
@@ -142,12 +174,12 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
 
   // ── Request Pointer Lock ──────────────────────────────────────────────────
   const requestPointerLock = useCallback(() => {
-    if (viewMode !== 'walkthrough' || activeModalExhibit) return;
+    if (viewModeRef.current !== 'walkthrough' || activeModalExhibitRef.current || isPausedRef.current) return;
     const canvas = canvasRef.current;
     if (canvas && !document.pointerLockElement) {
       canvas.requestPointerLock();
     }
-  }, [viewMode, activeModalExhibit]);
+  }, []);
 
   // ── Pointer Lock Change Listener ──────────────────────────────────────────
   useEffect(() => {
@@ -171,9 +203,16 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
   // ── Mouse & Keyboard Event Listeners for Player ───────────────────────────
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (viewMode === 'walkthrough' && document.pointerLockElement === canvasRef.current) {
-        playerRef.current?.onMouseMove(e.movementX, e.movementY);
-      } else if (viewMode === 'diorama' && orbitRef.current.isDragging) {
+      if (viewModeRef.current === 'walkthrough') {
+        if (document.pointerLockElement === canvasRef.current) {
+          const player = playerRef.current;
+          const cameraSys = cameraSysRef.current;
+          const controller = controllerRef.current;
+          if (player && cameraSys && controller) {
+            controller.onMouseMove(e.movementX, e.movementY, player, cameraSys);
+          }
+        }
+      } else if (viewModeRef.current === 'diorama' && orbitRef.current.isDragging) {
         const dx = e.clientX - orbitRef.current.lastX;
         const dy = e.clientY - orbitRef.current.lastY;
         orbitRef.current.lastX = e.clientX;
@@ -188,28 +227,35 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
     };
 
     const handleMouseDown = (e: MouseEvent) => {
-      if (viewMode === 'diorama') {
+      // Only handle clicks inside container
+      if (!containerRef.current?.contains(e.target as Node)) return;
+
+      if (viewModeRef.current === 'diorama') {
         orbitRef.current.isDragging = true;
         orbitRef.current.lastX = e.clientX;
         orbitRef.current.lastY = e.clientY;
-      } else if (viewMode === 'walkthrough') {
-        if (!document.pointerLockElement && !activeModalExhibit) {
+      } else if (viewModeRef.current === 'walkthrough') {
+        if (activeModalExhibitRef.current || isPausedRef.current) return;
+
+        if (!document.pointerLockElement) {
           requestPointerLock();
-        } else if (document.pointerLockElement && playerRef.current?.focusedExhibit) {
-          // Left click on focused exhibit inspects it
-          openExhibitDetail(playerRef.current.focusedExhibit);
+        } else if (document.pointerLockElement === canvasRef.current) {
+          const player = playerRef.current;
+          if (player?.focusedExhibit) {
+            openExhibitDetail(player.focusedExhibit);
+          }
         }
       }
     };
 
     const handleMouseUp = () => {
-      if (viewMode === 'diorama') {
+      if (viewModeRef.current === 'diorama') {
         orbitRef.current.isDragging = false;
       }
     };
 
     const handleWheel = (e: WheelEvent) => {
-      if (viewMode === 'diorama') {
+      if (viewModeRef.current === 'diorama') {
         e.preventDefault();
         const delta = e.deltaY * 0.015;
         orbitRef.current.targetRadius = Math.max(7, Math.min(26, orbitRef.current.targetRadius + delta));
@@ -217,20 +263,41 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (activeModalExhibit) return;
+      if (activeModalExhibitRef.current) return;
+
+      // Escape key opens or closes pause menu
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        setIsPaused((prev) => !prev);
+        if (document.pointerLockElement) {
+          document.exitPointerLock();
+        }
+        return;
+      }
+
+      if (isPausedRef.current) return;
+
+      // Cycle POV key [V]
+      if (e.code === 'KeyV') {
+        e.preventDefault();
+        cyclePOV();
+        return;
+      }
 
       // Check interaction key [E]
       if (e.code === 'KeyE') {
-        if (playerRef.current?.focusedExhibit) {
-          openExhibitDetail(playerRef.current.focusedExhibit);
+        const player = playerRef.current;
+        if (player?.focusedExhibit) {
+          openExhibitDetail(player.focusedExhibit);
+          return;
         }
       }
 
-      playerRef.current?.onKeyDown(e.code);
+      controllerRef.current?.onKeyDown(e.code);
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      playerRef.current?.onKeyUp(e.code);
+      controllerRef.current?.onKeyUp(e.code);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -247,12 +314,13 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
       window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      controllerRef.current?.resetInputs();
     };
-  }, [viewMode, activeModalExhibit, requestPointerLock, openExhibitDetail]);
+  }, [requestPointerLock, openExhibitDetail, cyclePOV]);
 
   // ── Touch Virtual Joystick & Swipe Handlers ───────────────────────────────
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (viewMode !== 'walkthrough') return;
+    if (viewMode !== 'walkthrough' || isPaused || activeModalExhibit) return;
 
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
@@ -273,7 +341,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (viewMode !== 'walkthrough') return;
+    if (viewMode !== 'walkthrough' || isPaused || activeModalExhibit) return;
 
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
@@ -291,10 +359,9 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
         const thumbY = Math.sin(angle) * clampedDist;
         setJoystickThumbOffset({ x: thumbX, y: thumbY });
 
-        // Normalize to [-1, 1]
-        if (playerRef.current) {
-          playerRef.current.touchMove.x = thumbX / maxDist;
-          playerRef.current.touchMove.y = thumbY / maxDist;
+        if (controllerRef.current) {
+          controllerRef.current.touchMove.x = thumbX / maxDist;
+          controllerRef.current.touchMove.y = thumbY / maxDist;
         }
       }
 
@@ -304,9 +371,9 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
         const dy = touch.clientY - lookLastPosRef.current.y;
         lookLastPosRef.current = { x: touch.clientX, y: touch.clientY };
 
-        if (playerRef.current) {
-          playerRef.current.touchLookDelta.x += dx;
-          playerRef.current.touchLookDelta.y += dy;
+        if (controllerRef.current) {
+          controllerRef.current.touchLookDelta.x += dx;
+          controllerRef.current.touchLookDelta.y += dy;
         }
       }
     }
@@ -319,9 +386,9 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
       if (touch.identifier === joystickTouchIdRef.current) {
         joystickTouchIdRef.current = null;
         setJoystickThumbOffset({ x: 0, y: 0 });
-        if (playerRef.current) {
-          playerRef.current.touchMove.x = 0;
-          playerRef.current.touchMove.y = 0;
+        if (controllerRef.current) {
+          controllerRef.current.touchMove.x = 0;
+          controllerRef.current.touchMove.y = 0;
         }
       }
 
@@ -359,22 +426,35 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
     rendererRef.current = renderer;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x181716); // dark gallery ambient
+    scene.background = new THREE.Color(0x181716);
     scene.fog = new THREE.FogExp2(0x181716, 0.025);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(
-      72, // 72 deg FOV for realistic human scale
+      72,
       container.clientWidth / container.clientHeight,
       0.1,
       80
     );
     cameraRef.current = camera;
 
-    // Build Player Controller (Spawns at entrance door, looking inward)
-    const player = new PlayerController(new THREE.Vector3(0, 0.50, 5.2), Math.PI);
+    // Instantiate Authoritative Player Entity (Avatar 1.70m, Eye level 1.60m)
+    const initialPos = new THREE.Vector3(0, 0.50, 5.2);
+    const player = new PlayerEntity(initialPos, Math.PI);
     player.bobEnabled = headBobEnabled;
     playerRef.current = player;
+
+    // Add Avatar Mesh to Scene
+    scene.add(player.avatar.rootGroup);
+
+    // Instantiate Decoupled Camera System (3 POVs, Wall-collision raycasting)
+    const cameraSys = new CameraSystem(new THREE.Vector3(0, 2.1, 5.2));
+    cameraSys.setPOV(currentPOV);
+    cameraSysRef.current = cameraSys;
+
+    // Instantiate Input Controller
+    const controller = new PlayerController();
+    controllerRef.current = controller;
 
     // Build Architectural Shell
     const architecture = buildMuseumArchitecture();
@@ -413,21 +493,26 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
 
       const delta = (currentTime - lastTimeRef.current) / 1000;
       lastTimeRef.current = currentTime;
-
-      // Cap delta
       const safeDelta = Math.min(delta, 0.08);
 
       // Update exhibits animation (e.g. rotating globe, video screen glow)
       updateExhibitsRef.current?.(safeDelta);
 
-      if (viewMode === 'walkthrough') {
-        // Update Kinematic Player
-        player.update(safeDelta, collidersRef.current, exhibitsRef.current, camera);
+      if (viewModeRef.current === 'walkthrough') {
+        if (!isPausedRef.current && !activeModalExhibitRef.current) {
+          controller.update(
+            safeDelta,
+            player,
+            cameraSys,
+            collidersRef.current,
+            exhibitsRef.current,
+            camera
+          );
+        }
         setFocusedExhibit(player.focusedExhibit);
       } else {
-        // Update Diorama Orbit Camera
+        // Diorama Orbit Camera
         const o = orbitRef.current;
-        // Smoothly lerp towards targets
         o.theta += (o.targetTheta - o.theta) * 0.12;
         o.phi += (o.targetPhi - o.phi) * 0.12;
         o.radius += (o.targetRadius - o.radius) * 0.12;
@@ -461,6 +546,13 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
       playerRef.current.bobEnabled = headBobEnabled;
     }
   }, [headBobEnabled]);
+
+  // Sync POV mode when changed externally
+  useEffect(() => {
+    if (cameraSysRef.current) {
+      cameraSysRef.current.setPOV(currentPOV);
+    }
+  }, [currentPOV]);
 
   // Handle Quality Tier Change
   const handleQualityChange = (q: MuseumQualityTier) => {
@@ -496,8 +588,9 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
 
       {/* ── Top Floating Bar ───────────────────────────────────────────────── */}
       <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
-        {/* Left: Mode Badge & Quick Status */}
+        {/* Left: Mode Badge & POV Switcher */}
         <div className="flex items-center gap-2 pointer-events-auto">
+          {/* Mode Switcher: Penjelajah vs Diorama */}
           <button
             onClick={() => {
               if (viewMode === 'walkthrough') {
@@ -508,10 +601,26 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
               }
             }}
             className="flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-parchment-700/60 bg-museum-surface/90 backdrop-blur-md text-xs font-mono text-parchment-200 hover:border-museum-gold hover:text-white transition-all shadow-lg cursor-pointer"
+            title="Ganti Mode Pandangan (Penjelajah / Orbit Luar)"
           >
-            <span>{viewMode === 'walkthrough' ? '🚶 Mode Penjelajah (FPS)' : '🏛️ Mode Diorama (Orbit)'}</span>
+            <span>{viewMode === 'walkthrough' ? '🚶 Mode Penjelajah' : '🏛️ Mode Diorama (Orbit)'}</span>
             <span className="text-[10px] text-parchment-400 border-l border-parchment-700 pl-2">Ganti</span>
           </button>
+
+          {/* POV Selector Button (only in walkthrough) */}
+          {viewMode === 'walkthrough' && (
+            <button
+              onClick={cyclePOV}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-museum-gold/60 bg-museum-surface/95 backdrop-blur-md text-xs font-mono text-museum-gold hover:bg-museum-gold hover:text-museum-dark transition-all shadow-lg cursor-pointer group"
+              title="Ganti Sudut Pandang Kamera (Tekan V)"
+            >
+              <span>{POV_LABELS[currentPOV].icon}</span>
+              <span className="font-semibold">{POV_LABELS[currentPOV].name}</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-museum-gold/20 text-museum-gold group-hover:bg-museum-dark group-hover:text-museum-gold font-bold">
+                V
+              </span>
+            </button>
+          )}
 
           {/* Quality Tier Selector */}
           <div className="hidden sm:flex items-center rounded-full border border-parchment-700/60 bg-museum-surface/90 backdrop-blur-md p-0.5 text-[11px] font-mono shadow-lg">
@@ -531,47 +640,63 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
           </div>
         </div>
 
-        {/* Right: Keybinds / Help Badge */}
-        <div className="hidden md:flex items-center gap-3 px-3 py-1.5 rounded-full border border-parchment-800/80 bg-museum-surface/85 backdrop-blur-md text-[11px] font-mono text-parchment-400 pointer-events-auto shadow-lg">
-          <span><kbd className="px-1.5 py-0.5 rounded bg-parchment-900 border border-parchment-700 text-parchment-200">WASD</kbd> Gerak</span>
-          <span><kbd className="px-1.5 py-0.5 rounded bg-parchment-900 border border-parchment-700 text-parchment-200">Shift</kbd> Lari</span>
-          <span><kbd className="px-1.5 py-0.5 rounded bg-parchment-900 border border-parchment-700 text-parchment-200">Spasi</kbd> Lompat</span>
-          <span><kbd className="px-1.5 py-0.5 rounded bg-parchment-900 border border-parchment-700 text-parchment-200">E</kbd> Periksa</span>
+        {/* Right: Keybinds & Pause / Menu Button */}
+        <div className="flex items-center gap-2 pointer-events-auto">
+          <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 rounded-full border border-parchment-800/80 bg-museum-surface/85 backdrop-blur-md text-[11px] font-mono text-parchment-400 shadow-lg">
+            <span><kbd className="px-1.5 py-0.5 rounded bg-parchment-900 border border-parchment-700 text-parchment-200">WASD</kbd> Gerak</span>
+            <span><kbd className="px-1.5 py-0.5 rounded bg-parchment-900 border border-parchment-700 text-parchment-200">Shift</kbd> Lari</span>
+            <span><kbd className="px-1.5 py-0.5 rounded bg-parchment-900 border border-parchment-700 text-parchment-200">Spasi</kbd> Lompat</span>
+            <span><kbd className="px-1.5 py-0.5 rounded bg-parchment-900 border border-parchment-700 text-parchment-200">V</kbd> POV</span>
+            <span><kbd className="px-1.5 py-0.5 rounded bg-parchment-900 border border-parchment-700 text-parchment-200">E</kbd> Periksa</span>
+            <button
+              onClick={() => setHeadBobEnabled(!headBobEnabled)}
+              title="Animasi Langkah Kepala"
+              className={`px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer border ${
+                headBobEnabled ? 'border-museum-gold/50 text-museum-gold' : 'border-parchment-700 text-parchment-500'
+              }`}
+            >
+              {headBobEnabled ? 'Bob ON' : 'Bob OFF'}
+            </button>
+          </div>
+
+          {/* Pause / In-Simulation Menu Button */}
           <button
-            onClick={() => setHeadBobEnabled(!headBobEnabled)}
-            title="Animasi Langkah Kepala"
-            className={`px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer border ${
-              headBobEnabled ? 'border-museum-gold/50 text-museum-gold' : 'border-parchment-700 text-parchment-500'
-            }`}
+            onClick={() => {
+              setIsPaused(true);
+              if (document.pointerLockElement) document.exitPointerLock();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-parchment-700/80 bg-museum-surface/90 backdrop-blur-md text-xs font-mono text-parchment-200 hover:text-white hover:border-museum-gold transition-all shadow-lg cursor-pointer"
+            title="Jeda Simulasi / Menu (ESC)"
           >
-            {headBobEnabled ? 'Bobbing ON' : 'Bobbing OFF'}
+            <span>⏸️</span>
+            <span>Menu (ESC)</span>
           </button>
         </div>
       </div>
 
-      {/* ── First-Person Crosshair & Proximity Prompt HUD ─────────────────── */}
-      {viewMode === 'walkthrough' && (
+      {/* ── Reticle & Proximity Prompt HUD (Walkthrough Mode) ──────────────── */}
+      {viewMode === 'walkthrough' && !isPaused && (
         <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center z-10">
-          {/* Reticle */}
-          <div className="relative flex items-center justify-center">
-            {focusedExhibit ? (
-              // Active Exhibit Reticle
-              <div className="relative w-8 h-8 flex items-center justify-center animate-pulse">
-                <div className="absolute inset-0 rounded-full border-2 border-museum-gold opacity-80" />
-                <div className="w-1.5 h-1.5 rounded-full bg-museum-gold shadow-[0_0_8px_#d4a843]" />
-              </div>
-            ) : (
-              // Idle Subtle Center Dot
-              <div className="w-2 h-2 rounded-full bg-parchment-300/60 shadow-sm" />
-            )}
-          </div>
+          {/* First-person Reticle (only in POV 1) */}
+          {currentPOV === 'first_person' && (
+            <div className="relative flex items-center justify-center">
+              {focusedExhibit ? (
+                <div className="relative w-8 h-8 flex items-center justify-center animate-pulse">
+                  <div className="absolute inset-0 rounded-full border-2 border-museum-gold opacity-80" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-museum-gold shadow-[0_0_8px_#d4a843]" />
+                </div>
+              ) : (
+                <div className="w-2 h-2 rounded-full bg-parchment-300/60 shadow-sm" />
+              )}
+            </div>
+          )}
 
-          {/* Interactive Inspection Tooltip Prompt */}
+          {/* Proximity Interaction Prompt */}
           {focusedExhibit && (
-            <div className="mt-6 flex flex-col items-center pointer-events-auto animate-bounce">
+            <div className="mt-8 flex flex-col items-center pointer-events-auto animate-bounce">
               <button
                 onClick={() => openExhibitDetail(focusedExhibit)}
-                className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-museum-surface/95 border border-museum-gold text-parchment-100 shadow-2xl backdrop-blur-md hover:bg-museum-gold hover:text-museum-dark transition-all cursor-pointer"
+                className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-museum-surface/95 border-2 border-museum-gold text-parchment-100 shadow-2xl backdrop-blur-md hover:bg-museum-gold hover:text-museum-dark transition-all cursor-pointer"
               >
                 <span className="px-2 py-0.5 rounded bg-museum-gold text-museum-dark font-bold font-mono text-xs">
                   E
@@ -580,7 +705,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
                   Periksa {focusedExhibit.title.split('&')[0]}
                 </span>
               </button>
-              <span className="text-[10px] font-mono text-museum-gold/80 mt-1">
+              <span className="text-[10px] font-mono text-museum-gold/90 mt-1">
                 Jarak Dekat · Klik atau Tekan [E]
               </span>
             </div>
@@ -588,12 +713,12 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
 
           {/* Unlocked Cursor Overlay Instruction (when not locked) */}
           {!isPointerLocked && !activeModalExhibit && !isMobile && (
-            <div className="absolute bottom-20 px-5 py-2.5 rounded-2xl bg-black/80 border border-museum-gold/40 text-center pointer-events-auto backdrop-blur-md shadow-2xl">
+            <div className="absolute bottom-20 px-5 py-2.5 rounded-2xl bg-black/85 border border-museum-gold/50 text-center pointer-events-auto backdrop-blur-md shadow-2xl">
               <p className="text-xs font-mono text-parchment-200">
                 <span className="text-museum-gold font-bold">Klik Layar</span> untuk mengunci kursor & mulai berjalan
               </p>
               <p className="text-[10px] font-mono text-parchment-400 mt-0.5">
-                Gunakan tetikus untuk menengok · Tekan <kbd className="px-1 bg-parchment-800 text-parchment-200 rounded">ESC</kbd> untuk melepas kursor
+                <kbd className="px-1 bg-parchment-800 text-parchment-200 rounded">V</kbd> Ganti POV (FPS/Karakter/Sinematik) · <kbd className="px-1 bg-parchment-800 text-parchment-200 rounded">ESC</kbd> Menu Jeda
               </p>
             </div>
           )}
@@ -601,7 +726,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
       )}
 
       {/* ── Mobile Touch Controls Overlay ─────────────────────────────────── */}
-      {isMobile && viewMode === 'walkthrough' && (
+      {isMobile && viewMode === 'walkthrough' && !isPaused && !activeModalExhibit && (
         <div className="absolute inset-0 pointer-events-none z-30">
           {/* Left: Virtual Movement Thumbstick Base */}
           <div className="absolute bottom-8 left-8 w-28 h-28 rounded-full border-2 border-white/20 bg-black/30 backdrop-blur-sm flex items-center justify-center">
@@ -614,7 +739,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
             />
           </div>
 
-          {/* Right: Action Buttons (Jump & Inspect) */}
+          {/* Right: Action Buttons (POV, Jump & Inspect) */}
           <div className="absolute bottom-8 right-8 flex flex-col gap-3 pointer-events-auto">
             {/* Inspect Button (if near exhibit) */}
             {focusedExhibit && (
@@ -630,46 +755,131 @@ export const Museum3D: React.FC<Museum3DProps> = ({ onSelectCountry, onZoneSelec
             {/* Jump Button */}
             <button
               onClick={() => {
-                if (playerRef.current) playerRef.current.touchJump = true;
+                if (controllerRef.current) controllerRef.current.touchJump = true;
               }}
               className="w-16 h-16 rounded-full bg-parchment-800/80 text-parchment-100 font-bold font-mono text-xs flex flex-col items-center justify-center shadow-lg border border-parchment-600 active:scale-95 transition-transform"
             >
               <span>⬆️</span>
               <span className="text-[10px]">Lompat</span>
             </button>
+
+            {/* Cycle POV Button */}
+            <button
+              onClick={cyclePOV}
+              className="w-14 h-14 rounded-full bg-museum-surface/90 border border-museum-gold/60 text-museum-gold font-bold font-mono text-xs flex flex-col items-center justify-center shadow-lg active:scale-95 transition-transform"
+              title="Ganti Sudut Pandang"
+            >
+              <span>{POV_LABELS[currentPOV].icon}</span>
+              <span className="text-[9px]">{POV_LABELS[currentPOV].short}</span>
+            </button>
           </div>
         </div>
       )}
 
       {/* ── Bottom Teleport & Fast Travel Dock ─────────────────────────────── */}
-      <div className="absolute bottom-3 left-4 right-4 z-20 flex justify-center pointer-events-none">
-        <div className="flex items-center gap-1.5 p-1.5 rounded-2xl border border-parchment-800/80 bg-museum-surface/90 backdrop-blur-md pointer-events-auto shadow-2xl overflow-x-auto max-w-full">
-          <span className="text-[10px] font-mono text-parchment-500 px-2 uppercase tracking-wider hidden lg:inline">
-            Teleportasi:
-          </span>
+      {!isPaused && (
+        <div className="absolute bottom-3 left-4 right-4 z-20 flex justify-center pointer-events-none">
+          <div className="flex items-center gap-1.5 p-1.5 rounded-2xl border border-parchment-800/80 bg-museum-surface/90 backdrop-blur-md pointer-events-auto shadow-2xl overflow-x-auto max-w-full">
+            <span className="text-[10px] font-mono text-parchment-500 px-2 uppercase tracking-wider hidden lg:inline">
+              Teleportasi:
+            </span>
 
-          <button
-            onClick={() => teleportToZone('entrance')}
-            className="px-2.5 py-1 rounded-xl text-xs font-mono text-parchment-300 hover:text-white hover:bg-parchment-800/60 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-            title="Pintu Masuk Museum"
-          >
-            <span>🚪</span>
-            <span className="hidden sm:inline">Pintu Masuk</span>
-          </button>
-
-          {exhibitsRef.current.map((exhibit) => (
             <button
-              key={exhibit.id}
-              onClick={() => teleportToZone(exhibit.id)}
+              onClick={() => teleportToZone('entrance')}
               className="px-2.5 py-1 rounded-xl text-xs font-mono text-parchment-300 hover:text-white hover:bg-parchment-800/60 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-              title={exhibit.title}
+              title="Pintu Masuk Museum"
             >
-              <span>{exhibit.icon}</span>
-              <span className="hidden sm:inline">{exhibit.tag}</span>
+              <span>🚪</span>
+              <span className="hidden sm:inline">Pintu Masuk</span>
             </button>
-          ))}
+
+            {exhibitsRef.current.map((exhibit) => (
+              <button
+                key={exhibit.id}
+                onClick={() => teleportToZone(exhibit.id)}
+                className="px-2.5 py-1 rounded-xl text-xs font-mono text-parchment-300 hover:text-white hover:bg-parchment-800/60 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                title={exhibit.title}
+              >
+                <span>{exhibit.icon}</span>
+                <span className="hidden sm:inline">{exhibit.tag}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ── In-Simulation Pause Modal ──────────────────────────────────────── */}
+      {isPaused && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-museum-gold/50 bg-museum-surface p-6 text-parchment-100 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-parchment-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">⏸️</span>
+                <h3 className="font-serif text-lg font-bold text-parchment-100">
+                  Simulasi Museum Dijeda
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-museum-gold/20 text-museum-gold font-bold">
+                {POV_LABELS[currentPOV].name}
+              </span>
+            </div>
+
+            <div className="text-xs font-mono text-parchment-300 space-y-2 bg-parchment-900/50 p-3.5 rounded-xl border border-parchment-800">
+              <div className="flex justify-between">
+                <span>Posisi Penjelajah:</span>
+                <span className="text-parchment-100 font-bold">
+                  {playerRef.current ? `X: ${playerRef.current.position.x.toFixed(1)}m, Z: ${playerRef.current.position.z.toFixed(1)}m` : '0, 0'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Skala Tubuh:</span>
+                <span className="text-parchment-100 font-bold">1.70 m (Mata 1.60 m)</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Sudut Pandang Kamera:</span>
+                <span className="text-museum-gold font-bold">{POV_LABELS[currentPOV].short}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2.5 pt-1">
+              <button
+                onClick={() => {
+                  setIsPaused(false);
+                  requestPointerLock();
+                }}
+                className="w-full py-2.5 rounded-xl bg-museum-gold text-museum-dark font-bold font-mono text-xs uppercase tracking-wider hover:bg-amber-400 transition-colors cursor-pointer shadow-lg flex items-center justify-center gap-2"
+              >
+                <span>▶️</span>
+                <span>Lanjutkan Eksplorasi</span>
+              </button>
+
+              <button
+                onClick={cyclePOV}
+                className="w-full py-2 rounded-xl border border-parchment-700 bg-parchment-900/50 text-parchment-200 hover:text-white hover:border-museum-gold font-mono text-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>🎥</span>
+                <span>Ganti Sudut Pandang (Tekan V)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsPaused(false);
+                  if (document.pointerLockElement) document.exitPointerLock();
+                  onExitSimulation?.();
+                }}
+                className="w-full py-2 rounded-xl border border-red-500/40 bg-red-950/20 text-red-300 hover:bg-red-900/40 hover:text-red-100 font-mono text-xs transition-colors cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>🚪</span>
+                <span>Keluar dari Simulasi ke Halaman Museum</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Curatorial Detail Modal ───────────────────────────────────────── */}
       {activeModalExhibit && (

@@ -2,16 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 // Import types & constants
-import { AVATAR_SPECS } from '../src/features/museum/museumEngine/types.js';
-import { PlayerController } from '../src/features/museum/museumEngine/playerController.js';
-import { buildMuseumArchitecture } from '../src/features/museum/museumEngine/museumArchitecture.js';
-import { buildMuseumExhibits } from '../src/features/museum/museumEngine/museumExhibits.js';
+import { AVATAR_SPECS } from '../src/features/museum/museumEngine/types.ts';
+import { PlayerEntity } from '../src/features/museum/museumEngine/playerEntity.ts';
+import { buildMuseumArchitecture } from '../src/features/museum/museumEngine/museumArchitecture.ts';
+import { buildMuseumExhibits } from '../src/features/museum/museumEngine/museumExhibits.ts';
 
 test('Museum Test 1: Canonical Scale & Avatar Specifications', () => {
   assert.equal(AVATAR_SPECS.height, 1.70, 'Avatar height must be 1.70m human scale');
   assert.equal(AVATAR_SPECS.eyeHeight, 1.60, 'Eye level must be 1.60m');
   assert.equal(AVATAR_SPECS.radius, 0.28, 'Collision radius must be 0.28m (0.56m diameter)');
-  assert.ok(AVATAR_SPECS.walkSpeed >= 3.0 && AVATAR_SPECS.walkSpeed <= 4.0, 'Walk speed must be realistic (~3.6 m/s)');
+  assert.ok(AVATAR_SPECS.walkSpeed >= 3.0 && AVATAR_SPECS.walkSpeed <= 4.0, 'Walk speed must be realistic (~3.2 m/s)');
   assert.ok(AVATAR_SPECS.sprintSpeed >= 5.5 && AVATAR_SPECS.sprintSpeed <= 7.0, 'Sprint speed must be realistic (~6.2 m/s)');
   assert.equal(AVATAR_SPECS.interactDistance, 2.6, 'Interact raycast distance must be 2.6m');
 });
@@ -32,7 +32,7 @@ test('Museum Test 2: Architectural Footprint & Door Clearance', () => {
 });
 
 test('Museum Test 3: Ground & Stair Step Elevation Physics', () => {
-  const player = new PlayerController();
+  const player = new PlayerEntity();
 
   // Outside ground
   assert.equal(player.getGroundHeight(0, 10.0), 0.0, 'Exterior plaza ground must be y=0.0m');
@@ -50,20 +50,14 @@ test('Museum Test 3: Ground & Stair Step Elevation Physics', () => {
 
 test('Museum Test 4: Wall Sliding Collision Math', () => {
   const arch = buildMuseumArchitecture();
-  const player = new PlayerController();
+  const player = new PlayerEntity();
 
-  // Position player inside near north wall (wall is at z = -4.0, interior face at z = -3.9)
-  player.position.set(0, 0.50, -3.5);
+  // Position player inside near north wall facing north (yaw = 0)
+  player.teleport(0, 0.50, -3.5, 0, 0);
   player.velocity.set(-2.0, 0, -4.0); // Moving forward-left towards north wall
 
-  const mockCamera = {
-    position: { set: () => {} },
-    rotation: { set: () => {} },
-    getWorldDirection: () => {},
-  };
-
   // Run update tick
-  player.update(0.05, arch.colliders, [], mockCamera);
+  player.update(0.05, { x: -1, z: -1 }, false, false, arch.colliders, [], 'first_person');
 
   // Player must NOT penetrate past north wall boundary (z <= -3.85 is inside wall)
   assert.ok(player.position.z >= -3.85, `Player must not penetrate north wall, z: ${player.position.z}`);
