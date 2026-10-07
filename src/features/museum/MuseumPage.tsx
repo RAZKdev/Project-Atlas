@@ -132,29 +132,11 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
   // ── Launch 3D Simulation (Explicit Action Only - Requirement 3 & 7) ───────
   const startSimulation = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setSimulationState('start_requested');
+    setSimulationState('loading');
+    setTimeout(() => {
+      setSimulationState('active');
+    }, 100);
   }, []);
-
-  // ── Simulation Lifecycle State Transitions (Requirement 7) ─────────────────
-  useEffect(() => {
-    let animFrame1: number;
-    let animFrame2: number;
-
-    if (simulationState === 'start_requested') {
-      setSimulationState('loading');
-      animFrame1 = requestAnimationFrame(() => {
-        setSimulationState('ready');
-        animFrame2 = requestAnimationFrame(() => {
-          setSimulationState('active');
-        });
-      });
-    }
-
-    return () => {
-      if (animFrame1) cancelAnimationFrame(animFrame1);
-      if (animFrame2) cancelAnimationFrame(animFrame2);
-    };
-  }, [simulationState]);
 
   // ── Exit 3D Simulation (Requirement 12) ───────────────────────────────────
   const exitSimulation = useCallback((e?: React.MouseEvent) => {
