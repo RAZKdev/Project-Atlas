@@ -31,6 +31,7 @@ export class PlayerEntity {
   public isSprinting: boolean = false;
   public locomotionState: LocomotionState = 'idle';
   public speed: number = 0;
+  public landingTimer: number = 0;
 
   // Head bob for POV 1 (meters)
   public bobAmount: number = 0;
@@ -48,6 +49,7 @@ export class PlayerEntity {
     this.velocity = new THREE.Vector3();
     this.yaw = initialYaw;
     this.pitch = 0;
+    this.isGrounded = Math.abs(this.position.y - this.getGroundHeight(this.position.x, this.position.z)) <= 0.05;
     this.avatar = new AvatarRenderer();
   }
 
@@ -58,6 +60,8 @@ export class PlayerEntity {
     if (yaw !== undefined) this.yaw = yaw;
     this.pitch = pitch;
     this.locomotionState = 'idle';
+    this.landingTimer = 0;
+    this.isGrounded = Math.abs(y - this.getGroundHeight(x, z)) <= 0.05;
   }
 
   /** Compute ground elevation under player's current (x, z) */
@@ -203,6 +207,8 @@ export class PlayerEntity {
 
       if (wasAirborne) {
         this.locomotionState = 'landing';
+        this.landingTimer = 0.22;
+        this.avatar.landingProgress = 0.0;
       }
     } else {
       const stepDiff = groundY - this.position.y;
@@ -213,30 +219,69 @@ export class PlayerEntity {
       }
     }
 
-    // ── 5. Derive Locomotion State Machine ───────────────────────────────────
+    // ── 5. Derive Locomotion State Machine (with Hysteresis) ─────────────────
     if (!this.isGrounded) {
-      if (this.velocity.y > 0.5) {
+      if (this.velocity.y > 0.4) {
         this.locomotionState = 'jump_takeoff';
       } else {
         this.locomotionState = 'airborne';
       }
-    } else if (this.locomotionState !== 'landing') {
-      if (this.speed < 0.15) {
-        this.locomotionState = 'idle';
-      } else if (this.isSprinting) {
-        this.locomotionState = 'sprint';
-      } else if (this.speed > 3.4) {
-        this.locomotionState = 'run';
+    } else if (this.landingTimer > 0) {
+      this.landingTimer -= dt;
+      if (this.landingTimer <= 0) {
+        this.landingTimer = 0;
+        // Smooth recovery into appropriate grounded state based on current velocity
+        if (this.speed < 0.20) {
+          this.locomotionState = 'idle';
+        } else if (this.isSprinting && this.speed > 4.5) {
+          this.locomotionState = 'sprint';
+        } else if (this.speed > 3.8) {
+          this.locomotionState = 'run';
+        } else {
+          this.locomotionState = 'walk';
+        }
       } else {
-        this.locomotionState = 'walk';
+        this.locomotionState = 'landing';
+      }
+    } else {
+      // Grounded state machine with hysteresis to eliminate flickering near speed thresholds
+      const current = this.locomotionState;
+      if (current === 'idle') {
+        if (this.speed >= 0.25) {
+          this.locomotionState = this.isSprinting && this.speed > 4.5 ? 'sprint' : (this.speed > 3.8 ? 'run' : 'walk');
+        }
+      } else if (current === 'walk') {
+        if (this.speed < 0.15) {
+          this.locomotionState = 'idle';
+        } else if (this.isSprinting && this.speed >= 4.5) {
+          this.locomotionState = 'sprint';
+        } else if (this.speed >= 3.8) {
+          this.locomotionState = 'run';
+        }
+      } else if (current === 'run') {
+        if (this.speed < 0.15) {
+          this.locomotionState = 'idle';
+        } else if (this.isSprinting && this.speed >= 4.5) {
+          this.locomotionState = 'sprint';
+        } else if (this.speed < 3.2) {
+          this.locomotionState = 'walk';
+        }
+      } else if (current === 'sprint') {
+        if (this.speed < 0.15) {
+          this.locomotionState = 'idle';
+        } else if (!this.isSprinting || this.speed < 4.0) {
+          this.locomotionState = this.speed >= 3.2 ? 'run' : 'walk';
+        }
+      } else {
+        this.locomotionState = this.speed >= 0.25 ? 'walk' : 'idle';
       }
     }
 
     // ── 6. Head Bobbing for POV 1 ───────────────────────────────────────────
     if (this.bobEnabled && this.isGrounded && this.speed > 0.15) {
-      const bobFreq = this.isSprinting ? 14 : 9;
+      const bobFreq = this.isSprinting ? 14 : (this.locomotionState === 'run' ? 11 : 8.5);
       this.bobAmount += dt * bobFreq * (this.speed / AVATAR_SPECS.walkSpeed);
-      this.bobY = Math.sin(this.bobAmount) * (this.isSprinting ? 0.035 : 0.02);
+      this.bobY = Math.sin(this.bobAmount) * (this.isSprinting ? 0.035 : (this.locomotionState === 'run' ? 0.028 : 0.018));
     } else {
       this.bobAmount = 0;
       this.bobY = 0;

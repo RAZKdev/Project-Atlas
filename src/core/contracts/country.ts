@@ -12,6 +12,8 @@ export interface Country {
   continent: 'Asia' | 'Europe' | 'Africa' | 'North America' | 'South America' | 'Oceania' | 'Antarctica';
   status: CountryStatus;
   summary?: string;
+  capital?: string;
+  officialName?: string;
   coverImage?: string;     // URL or asset path
   visitedYear?: number;
   documentedPlacesCount?: number;

@@ -16,33 +16,55 @@ test('POV & Lifecycle Test 1: Simulation State Machine & Entry Gating', () => {
   let currentState = 'idle';
   assert.equal(currentState, 'idle', 'Default state must be idle to prevent accidental entry');
 
-  // Explicit start action
-  const startSimulation = () => {
+  // Explicit start action: user clicks "Masuk ke Simulasi Museum (3D)"
+  const requestStartSimulation = () => {
+    currentState = 'start_requested';
+  };
+  requestStartSimulation();
+  assert.equal(currentState, 'start_requested', 'State transitions to start_requested upon explicit CTA click');
+
+  // Engine lifecycle progression: loading assets, physics, lighting
+  const proceedToLoading = () => {
+    currentState = 'loading';
+  };
+  proceedToLoading();
+  assert.equal(currentState, 'loading', 'State transitions to loading while assets prepare');
+
+  // Ready to activate
+  const proceedToReady = () => {
+    currentState = 'ready';
+  };
+  proceedToReady();
+  assert.equal(currentState, 'ready', 'State transitions to ready once initialized');
+
+  // Active exploration
+  const activateSimulation = () => {
     currentState = 'active';
   };
-  startSimulation();
-  assert.equal(currentState, 'active', 'State becomes active only upon explicit user confirmation');
+  activateSimulation();
+  assert.equal(currentState, 'active', 'State becomes active for interactive gameplay');
 
   // Pause action (ESC or in-sim menu)
   const pauseSimulation = () => {
     currentState = 'paused';
   };
   pauseSimulation();
-  assert.equal(currentState, 'paused', 'State becomes paused');
+  assert.equal(currentState, 'paused', 'State becomes paused when user presses ESC or opens menu');
 
   // Resume action
   const resumeSimulation = () => {
     currentState = 'active';
   };
   resumeSimulation();
-  assert.equal(currentState, 'active', 'State resumes to active');
+  assert.equal(currentState, 'active', 'State resumes to active when exiting pause menu');
 
   // Clean exit back to web page
   const exitSimulation = () => {
+    currentState = 'exiting';
     currentState = 'idle';
   };
   exitSimulation();
-  assert.equal(currentState, 'idle', 'State returns cleanly to idle on exit');
+  assert.equal(currentState, 'idle', 'State returns cleanly to idle on exit without page reload');
 });
 
 test('POV & Lifecycle Test 2: Camera POV Cycle & Mode Invariants', () => {

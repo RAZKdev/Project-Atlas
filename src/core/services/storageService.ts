@@ -1,6 +1,7 @@
 import { Country, Memory, Souvenir, AtlasStats } from '../contracts';
 import { INITIAL_COUNTRIES } from '../../data/countries';
 import { SEED_MEMORIES, INITIAL_UPDATED_COUNTRIES } from '../../data/seedData';
+import { CANONICAL_COUNTRIES } from '../../atlas/countries/canonicalCountries';
 
 const STORAGE_KEYS = {
   COUNTRIES: 'project_atlas_countries_v1',
@@ -44,6 +45,8 @@ class StorageService {
             countryMap.set(saved.code.toUpperCase(), {
               ...base,
               ...saved,
+              capital: base.capital || saved.capital,
+              officialName: base.officialName || saved.officialName,
               name: base.name, // Prefer Indonesian official name
               continent: base.continent,
             });
@@ -70,9 +73,16 @@ class StorageService {
   }
 
   private buildInitialCountries(): Country[] {
+    const canonicalMap = new Map(CANONICAL_COUNTRIES.map(c => [c.id.toUpperCase(), c]));
     return INITIAL_COUNTRIES.map(base => {
+      const canonical = canonicalMap.get(base.code.toUpperCase());
       const update = INITIAL_UPDATED_COUNTRIES[base.code];
-      return update ? { ...base, ...update } : base;
+      const merged: Country = {
+        ...base,
+        capital: canonical?.capital || '',
+        officialName: canonical?.officialName || '',
+      };
+      return update ? { ...merged, ...update } : merged;
     });
   }
 

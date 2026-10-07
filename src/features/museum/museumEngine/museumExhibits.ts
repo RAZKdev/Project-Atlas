@@ -18,7 +18,7 @@ export interface ExhibitsResult {
   group: THREE.Group;
   exhibits: InteractableExhibit[];
   colliders: CollisionBox[];
-  update: (delta: number) => void;
+  update: (delta: number, focusedExhibitId?: string | null) => void;
 }
 
 export function buildMuseumExhibits(): ExhibitsResult {
@@ -96,11 +96,31 @@ export function buildMuseumExhibits(): ExhibitsResult {
   let videoScreenMesh: THREE.Mesh | null = null;
   let videoTimer = 0;
 
+  // Interactive Floor Halos for Proximity / Gaze Indication
+  const zoneHalos = new Map<string, { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial }>();
+
+  const createZoneHalo = (zoneId: string, radius: number, parentGroup: THREE.Group, offsetX = 0, offsetZ = 0) => {
+    const ringGeo = new THREE.RingGeometry(radius - 0.04, radius, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xd4a843,
+      transparent: true,
+      opacity: 0.10,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.rotation.x = -Math.PI / 2;
+    ringMesh.position.set(offsetX, 0.005, offsetZ); // flush with floor elevation
+    parentGroup.add(ringMesh);
+    zoneHalos.set(zoneId, { mesh: ringMesh, mat: ringMat });
+  };
+
   // ═════════════════════════════════════════════════════════════════════════════
   // ZONE 1: INTRO & BUKU LEGACY (Front Left, x: -1.8, z: 2.4)
   // ═════════════════════════════════════════════════════════════════════════════
   const zoneIntroGroup = new THREE.Group();
   zoneIntroGroup.position.set(-1.8, 0.50, 2.4);
+  createZoneHalo('intro', 0.75, zoneIntroGroup);
 
   // Walnut Display Plinth (0.80m wide x 0.60m deep x 0.90m high)
   const introPlinthGeo = new THREE.BoxGeometry(0.80, 0.90, 0.60);
@@ -219,6 +239,7 @@ export function buildMuseumExhibits(): ExhibitsResult {
   // ═════════════════════════════════════════════════════════════════════════════
   const zoneGlobeGroup = new THREE.Group();
   zoneGlobeGroup.position.set(0, 0.50, 0);
+  createZoneHalo('globe', 0.95, zoneGlobeGroup);
 
   // Mahogany Presentation Pedestal (Octagonal / Cylindrical, 1.30m diameter x 0.85m high)
   const pedestalGeo = new THREE.CylinderGeometry(0.65, 0.70, 0.85, 24);
@@ -348,6 +369,7 @@ export function buildMuseumExhibits(): ExhibitsResult {
   // ═════════════════════════════════════════════════════════════════════════════
   const zoneGalleryGroup = new THREE.Group();
   zoneGalleryGroup.position.set(2.86, 0.50, 0);
+  createZoneHalo('gallery', 0.85, zoneGalleryGroup, -0.86, 0);
 
   // 6 Framed Photographs on the East Wall (2 rows x 3 columns)
   const photoData = [
@@ -476,6 +498,7 @@ export function buildMuseumExhibits(): ExhibitsResult {
   // ═════════════════════════════════════════════════════════════════════════════
   const zoneFlagsGroup = new THREE.Group();
   zoneFlagsGroup.position.set(0, 0.50, -3.70);
+  createZoneHalo('flags', 1.05, zoneFlagsGroup, 0, 0.35);
 
   // Large Wall Shadowbox Frame (2.60m wide x 1.20m high x 0.12m deep)
   const shadowboxGeo = new THREE.BoxGeometry(2.60, 1.20, 0.12);
@@ -595,6 +618,7 @@ export function buildMuseumExhibits(): ExhibitsResult {
   // ═════════════════════════════════════════════════════════════════════════════
   const zoneSouvenirGroup = new THREE.Group();
   zoneSouvenirGroup.position.set(-2.82, 0.50, 0);
+  createZoneHalo('souvenir', 0.95, zoneSouvenirGroup, 0.45, 0);
 
   // Twin Tall Museum Vitrine Cabinets (2.40m wide total x 2.20m high x 0.55m deep)
   const vitrineFrameGeo = new THREE.BoxGeometry(0.55, 2.20, 2.40);
@@ -720,6 +744,7 @@ export function buildMuseumExhibits(): ExhibitsResult {
   // ═════════════════════════════════════════════════════════════════════════════
   const zoneReadingGroup = new THREE.Group();
   zoneReadingGroup.position.set(1.85, 0.50, -2.60);
+  createZoneHalo('reading', 0.85, zoneReadingGroup, 0, 0);
 
   // Mid-Century Upholstered Lounge Armchair
   // Seat cushion (0.65m wide x 0.65m deep x 0.40m high)
@@ -853,7 +878,7 @@ export function buildMuseumExhibits(): ExhibitsResult {
   });
 
   // ── Render Loop Update Callback ───────────────────────────────────────────
-  const update = (delta: number) => {
+  const update = (delta: number, focusedExhibitId?: string | null) => {
     // 1. Slow, elegant continuous rotation of the Central Earth Globe
     if (globeMesh) {
       globeMesh.rotation.y += delta * 0.22; // ~1 rotation every 28 seconds
@@ -866,6 +891,13 @@ export function buildMuseumExhibits(): ExhibitsResult {
       const lightness = 0.20 + Math.sin(videoTimer * 0.8) * 0.05;
       (videoScreenMesh.material as THREE.MeshBasicMaterial).color.setHSL(hue, 0.45, lightness);
     }
+
+    // 3. Proximity / Gaze Halo Pulse for Focused Exhibit
+    zoneHalos.forEach((halo, zoneId) => {
+      const isFocused = focusedExhibitId === zoneId;
+      const targetOpacity = isFocused ? 0.45 + 0.15 * Math.sin(videoTimer * 5) : 0.08;
+      halo.mat.opacity += (targetOpacity - halo.mat.opacity) * Math.min(1, delta * 8);
+    });
   };
 
   return { group, exhibits, colliders, update };

@@ -256,7 +256,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className={`flex-1${activeTab === 'museum' ? '' : ' pt-8'}`}>
+      <main className={`flex-1${activeTab === 'museum' ? '' : ' pt-8 pb-20 lg:pb-0'}`}>
         {renderContent()}
       </main>
 

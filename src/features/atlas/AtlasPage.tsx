@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Filter, Globe, MapPin, BookOpen, ArrowRight, Compass, Layers, Orbit } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Search, Filter, Globe, MapPin, BookOpen, ArrowRight, Compass, Layers, Orbit, Sparkles, X } from 'lucide-react';
 import { Country, CountryStatus, Memory } from '../../core/contracts';
+import { countryRegistry, SearchMatch } from '../../atlas/countries/countryRegistry';
 import { StatusBadge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Globe3D } from './Globe3D';
@@ -38,21 +39,63 @@ export const AtlasPage: React.FC<AtlasPageProps> = ({
 
   const continents = ['Semua', 'Asia', 'Eropa', 'Afrika', 'Amerika Utara', 'Amerika Selatan', 'Oseania'];
 
-  // Filter countries
+  // Search matches using countryRegistry engine
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return null;
+    return countryRegistry.search(searchQuery, 195);
+  }, [searchQuery]);
+
+  const searchResultsMap = useMemo(() => {
+    if (!searchResults) return null;
+    const map = new Map<string, SearchMatch>();
+    searchResults.forEach(m => map.set(m.country.id.toUpperCase(), m));
+    return map;
+  }, [searchResults]);
+
+  // Filter countries while strictly preserving search relevance rank
   const filteredCountries = useMemo(() => {
-    return countries.filter(c => {
-      const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            c.code.toLowerCase().includes(searchQuery.toLowerCase());
-      const englishContinent = continentMap[selectedContinent];
+    const englishContinent = continentMap[selectedContinent];
+
+    if (!searchResults) {
+      return countries.filter(c => {
+        const matchesContinent = selectedContinent === 'Semua' || c.continent === englishContinent;
+        const matchesStatus = selectedStatus === 'all' || c.status === selectedStatus;
+        return matchesContinent && matchesStatus;
+      });
+    }
+
+    const countryByCode = new Map(countries.map(c => [c.code.toUpperCase(), c]));
+    const matchedList: Country[] = [];
+
+    for (const match of searchResults) {
+      const c = countryByCode.get(match.country.id.toUpperCase());
+      if (!c) continue;
       const matchesContinent = selectedContinent === 'Semua' || c.continent === englishContinent;
       const matchesStatus = selectedStatus === 'all' || c.status === selectedStatus;
-      return matchesSearch && matchesContinent && matchesStatus;
-    });
-  }, [countries, searchQuery, selectedContinent, selectedStatus]);
+      if (matchesContinent && matchesStatus) {
+        matchedList.push({
+          ...c,
+          capital: c.capital || match.country.capital,
+          officialName: c.officialName || match.country.officialName,
+        });
+      }
+    }
+    return matchedList;
+  }, [countries, searchResults, selectedContinent, selectedStatus]);
+
+  // Auto-inspect the top search result when searching so the 3D globe / map focuses on the match
+  useEffect(() => {
+    if (searchQuery.trim() && filteredCountries.length > 0) {
+      const topMatch = filteredCountries[0];
+      if (topMatch.code !== inspectedCountryCode) {
+        setInspectedCountryCode(topMatch.code);
+      }
+    }
+  }, [searchQuery, filteredCountries]);
 
   const inspectedCountry = useMemo(() => {
-    return countries.find(c => c.code === inspectedCountryCode) || countries[0];
-  }, [countries, inspectedCountryCode]);
+    return countries.find(c => c.code === inspectedCountryCode) || filteredCountries[0] || countries[0];
+  }, [countries, filteredCountries, inspectedCountryCode]);
 
   const inspectedMemories = useMemo(() => {
     if (!inspectedCountry) return [];
@@ -167,14 +210,23 @@ export const AtlasPage: React.FC<AtlasPageProps> = ({
         
         {/* Search */}
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-earth-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Cari negara berdasarkan nama atau kode ISO (misal: Indonesia, JP, IS)..."
+            placeholder="Cari negara, ibu kota (misal: Bandar Seri Begawan, New Delhi), atau kode ISO..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full bg-museum-card border border-museum-border rounded-md pl-9 pr-4 py-2 text-sm text-parchment-100 placeholder:text-stone-500 focus:outline-none focus:border-earth-500/50"
+            className="w-full bg-museum-card border border-museum-border rounded-md pl-9 pr-8 py-2 text-sm text-parchment-100 placeholder:text-stone-500 focus:outline-none focus:border-earth-500/50"
           />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-parchment-100 p-0.5 rounded cursor-pointer"
+              title="Bersihkan pencarian"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Continent Pills */}
@@ -213,8 +265,47 @@ export const AtlasPage: React.FC<AtlasPageProps> = ({
 
       </div>
 
-      {/* Main Content Area based on ViewMode */}
-      {viewMode === 'globe' ? (
+      {/* Active Search Context / Matches Badge */}
+      {searchQuery.trim() && (
+        <div className="flex items-center justify-between text-xs font-mono px-1 text-stone-400">
+          <span>
+            Hasil pencarian untuk <span className="text-earth-300 font-semibold">"{searchQuery}"</span>: {filteredCountries.length} negara ditemukan
+          </span>
+          <button
+            onClick={() => setSearchQuery('')}
+            className="text-earth-400 hover:text-earth-300 underline cursor-pointer"
+          >
+            Reset Pencarian
+          </button>
+        </div>
+      )}
+
+      {/* Main Content Area based on ViewMode / Empty Search State */}
+      {searchQuery.trim() && filteredCountries.length === 0 ? (
+        /* NO RESULTS STATE */
+        <div className="bg-museum-surface/90 border border-museum-border rounded-xl p-12 text-center max-w-2xl mx-auto space-y-4 my-8 shadow-lg">
+          <div className="w-12 h-12 rounded-full bg-museum-card border border-museum-border flex items-center justify-center mx-auto text-stone-500">
+            <Search className="w-6 h-6 text-earth-400" />
+          </div>
+          <h3 className="font-serif text-2xl text-parchment-100">
+            Tidak ada negara atau ibu kota yang cocok
+          </h3>
+          <p className="text-sm text-stone-300 font-sans leading-relaxed">
+            Pencarian untuk <span className="font-mono text-parchment-100 bg-white/5 px-2 py-0.5 rounded border border-museum-border">"{searchQuery}"</span> tidak menemukan negara atau ibu kota manapun.
+          </p>
+          <div className="pt-2 text-xs font-mono text-earth-300/90 bg-earth-500/10 border border-earth-500/30 rounded-lg p-3.5 inline-block text-left max-w-lg">
+            <span className="font-bold block mb-1">💡 Tips Pencarian:</span>
+            • Cari nama negara lengkap atau parsial (misal: <span className="text-parchment-200">Indonesia, South Korea, Papua New Guinea</span>)<br />
+            • Cari nama ibu kota multi-kata (misal: <span className="text-parchment-200">Bandar Seri Begawan, New Delhi, Buenos Aires, San José</span>)<br />
+            • Gunakan kode ISO 2 atau 3 huruf (misal: <span className="text-parchment-200">ID, BN, CHE, USA</span>)
+          </div>
+          <div className="pt-4">
+            <Button variant="secondary" size="sm" onClick={() => setSearchQuery('')}>
+              Bersihkan Filter & Pencarian
+            </Button>
+          </div>
+        </div>
+      ) : viewMode === 'globe' ? (
         /* MODE 1: GLOBE 3D INTERACTIVE */
         <Globe3D
           countries={filteredCountries}
@@ -341,7 +432,21 @@ export const AtlasPage: React.FC<AtlasPageProps> = ({
                         <span className="text-sm font-sans font-light text-stone-400">({inspectedCountry.nativeName})</span>
                       )}
                     </h2>
-                    <span className="font-mono text-xs text-earth-400">ISO: {inspectedCountry.code}</span>
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-stone-400 mt-1">
+                      <span className="text-earth-400 font-semibold">ISO: {inspectedCountry.code}</span>
+                      {inspectedCountry.capital && (
+                        <>
+                          <span>•</span>
+                          <span className="text-parchment-200">Ibu Kota: <strong className="text-earth-300 font-medium">{inspectedCountry.capital}</strong></span>
+                        </>
+                      )}
+                    </div>
+                    {searchResultsMap?.get(inspectedCountry.code)?.highlightDetail && (
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-earth-500/15 border border-earth-500/30 text-xs font-mono text-earth-300 mt-2">
+                        <Sparkles className="w-3.5 h-3.5 text-earth-400 shrink-0" />
+                        <span>{searchResultsMap.get(inspectedCountry.code)!.highlightDetail}</span>
+                      </div>
+                    )}
                   </div>
 
                   {inspectedCountry.coverImage && (
@@ -463,7 +568,20 @@ export const AtlasPage: React.FC<AtlasPageProps> = ({
                     <StatusBadge status={country.status} size="sm" />
                   </div>
                   <h3 className="font-serif text-base text-parchment-100">{country.name}</h3>
-                  <span className="text-xs text-stone-400 font-mono block">{country.continent}</span>
+                  <div className="flex flex-col gap-0.5 mt-0.5">
+                    <span className="text-xs text-stone-400 font-mono">{country.continent}</span>
+                    {country.capital && (
+                      <span className="text-[11px] font-mono text-stone-300">
+                        Ibu kota: <strong className="text-earth-300 font-normal">{country.capital}</strong>
+                      </span>
+                    )}
+                  </div>
+                  {searchResultsMap?.get(country.code)?.highlightDetail && (
+                    <div className="mt-2 inline-flex items-center gap-1 text-[11px] font-mono text-earth-300 bg-earth-500/15 border border-earth-500/30 px-2 py-0.5 rounded">
+                      <Sparkles className="w-3 h-3 text-earth-400 shrink-0" />
+                      <span className="line-clamp-1">{searchResultsMap.get(country.code)!.highlightDetail}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-museum-border/40 text-[11px] font-mono text-stone-400">

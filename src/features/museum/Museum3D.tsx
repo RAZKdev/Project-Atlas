@@ -65,7 +65,8 @@ export const Museum3D: React.FC<Museum3DProps> = ({
   const controllerRef = useRef<PlayerController | null>(null);
   const collidersRef = useRef<CollisionBox[]>([]);
   const exhibitsRef = useRef<InteractableExhibit[]>([]);
-  const updateExhibitsRef = useRef<((delta: number) => void) | null>(null);
+  const updateExhibitsRef = useRef<((delta: number, focusedExhibitId?: string | null) => void) | null>(null);
+  const updateArchRef = useRef<((delta: number, elapsed: number) => void) | null>(null);
   const setLightingQualityRef = useRef<((q: MuseumQualityTier) => void) | null>(null);
 
   // Animation frame reference
@@ -91,6 +92,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({
   const [currentPOV, setCurrentPOV] = useState<POVMode>('first_person');
   const [isPointerLocked, setIsPointerLocked] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [focusedExhibit, setFocusedExhibit] = useState<InteractableExhibit | null>(null);
   const [activeModalExhibit, setActiveModalExhibit] = useState<InteractableExhibit | null>(null);
   const [quality, setQuality] = useState<MuseumQualityTier>('high');
@@ -123,6 +125,28 @@ export const Museum3D: React.FC<Museum3DProps> = ({
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Listen to fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  // User-initiated fullscreen toggle (Requirement 10)
+  const toggleFullscreen = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.().catch(() => {});
+    }
   }, []);
 
   // ── Open Exhibit Detail ───────────────────────────────────────────────────
@@ -320,6 +344,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({
 
   // ── Touch Virtual Joystick & Swipe Handlers ───────────────────────────────
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
     if (viewMode !== 'walkthrough' || isPaused || activeModalExhibit) return;
 
     for (let i = 0; i < e.changedTouches.length; i++) {
@@ -341,6 +366,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
     if (viewMode !== 'walkthrough' || isPaused || activeModalExhibit) return;
 
     for (let i = 0; i < e.changedTouches.length; i++) {
@@ -380,6 +406,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({
   };
 
   const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    e.stopPropagation();
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
 
@@ -425,6 +452,12 @@ export const Museum3D: React.FC<Museum3DProps> = ({
     renderer.toneMappingExposure = 1.05;
     rendererRef.current = renderer;
 
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      setWebglError('Konteks WebGL terputus (GPU context lost). Anda dapat kembali ke kurasi 2D.');
+    };
+    canvas.addEventListener('webglcontextlost', handleContextLost, false);
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x181716);
     scene.fog = new THREE.FogExp2(0x181716, 0.025);
@@ -459,6 +492,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({
     // Build Architectural Shell
     const architecture = buildMuseumArchitecture();
     scene.add(architecture.group);
+    updateArchRef.current = architecture.update || null;
 
     // Build Exhibits
     const exhibitsModule = buildMuseumExhibits();
@@ -495,8 +529,10 @@ export const Museum3D: React.FC<Museum3DProps> = ({
       lastTimeRef.current = currentTime;
       const safeDelta = Math.min(delta, 0.08);
 
-      // Update exhibits animation (e.g. rotating globe, video screen glow)
-      updateExhibitsRef.current?.(safeDelta);
+      // Update exhibits animation (e.g. rotating globe, video screen glow, gaze halo)
+      updateExhibitsRef.current?.(safeDelta, playerRef.current?.focusedExhibit?.id);
+      // Update architecture & fountain animation (e.g. water spray, ripples)
+      updateArchRef.current?.(safeDelta, currentTime / 1000);
 
       if (viewModeRef.current === 'walkthrough') {
         if (!isPausedRef.current && !activeModalExhibitRef.current) {
@@ -535,6 +571,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({
     return () => {
       cancelAnimationFrame(animFrameIdRef.current);
       window.removeEventListener('resize', handleResize);
+      canvas.removeEventListener('webglcontextlost', handleContextLost);
       renderer.dispose();
       scene.clear();
     };
@@ -575,13 +612,23 @@ export const Museum3D: React.FC<Museum3DProps> = ({
         className="w-full h-full block cursor-crosshair focus:outline-none"
       />
 
-      {/* WebGL Error Banner */}
+      {/* WebGL Error Banner (Graceful Fallback - Requirement 13) */}
       {webglError && (
         <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-museum-dark/95 text-parchment-200 text-center">
-          <div className="max-w-md p-6 rounded-2xl border border-red-500/40 bg-red-950/20">
-            <span className="text-3xl mb-3 block">⚠️</span>
-            <h3 className="font-serif text-lg font-bold text-red-400 mb-2">Akselerasi 3D Tidak Tersedia</h3>
-            <p className="text-xs font-mono text-parchment-400 leading-relaxed mb-4">{webglError}</p>
+          <div className="max-w-md p-6 rounded-2xl border border-red-500/40 bg-red-950/40 shadow-2xl space-y-4">
+            <span className="text-3xl block">⚠️</span>
+            <h3 className="font-serif text-lg font-bold text-red-400">Akselerasi 3D Tidak Tersedia</h3>
+            <p className="text-xs font-mono text-parchment-400 leading-relaxed">{webglError}</p>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onExitSimulation?.();
+              }}
+              className="px-5 py-2.5 rounded-xl bg-museum-gold text-museum-dark font-mono font-bold text-xs uppercase tracking-wider hover:brightness-110 active:scale-95 transition-all cursor-pointer shadow-lg inline-flex items-center gap-2"
+            >
+              <span>←</span>
+              <span>Kembali ke Tampilan 2D</span>
+            </button>
           </div>
         </div>
       )}
@@ -640,7 +687,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({
           </div>
         </div>
 
-        {/* Right: Keybinds & Pause / Menu Button */}
+        {/* Right: Keybinds, Fullscreen & Pause / Menu Button */}
         <div className="flex items-center gap-2 pointer-events-auto">
           <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 rounded-full border border-parchment-800/80 bg-museum-surface/85 backdrop-blur-md text-[11px] font-mono text-parchment-400 shadow-lg">
             <span><kbd className="px-1.5 py-0.5 rounded bg-parchment-900 border border-parchment-700 text-parchment-200">WASD</kbd> Gerak</span>
@@ -658,6 +705,16 @@ export const Museum3D: React.FC<Museum3DProps> = ({
               {headBobEnabled ? 'Bob ON' : 'Bob OFF'}
             </button>
           </div>
+
+          {/* User-Initiated Fullscreen Toggle Button (Requirement 10) */}
+          <button
+            onClick={toggleFullscreen}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-parchment-700/80 bg-museum-surface/90 backdrop-blur-md text-xs font-mono text-parchment-200 hover:text-white hover:border-museum-gold transition-all shadow-lg cursor-pointer"
+            title={isFullscreen ? 'Keluar Layar Penuh' : 'Mode Layar Penuh'}
+          >
+            <span>{isFullscreen ? '🗗' : '⛶'}</span>
+            <span className="hidden sm:inline">{isFullscreen ? 'Layar Biasa' : 'Layar Penuh'}</span>
+          </button>
 
           {/* Pause / In-Simulation Menu Button */}
           <button

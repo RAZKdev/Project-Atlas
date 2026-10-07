@@ -10,9 +10,9 @@ import * as THREE from 'three';
 /** Simulation Lifecycle States */
 export type SimulationState =
   | 'idle'            // On Museum Page, 3D simulation inactive
-  | 'starting'        // Start requested by explicit button click
+  | 'start_requested' // User explicitly requested simulation entry via CTA
   | 'loading'         // Initializing 3D assets, physics, lighting
-  | 'ready'           // Ready to render
+  | 'ready'           // Simulation initialized, ready to activate
   | 'active'          // Player actively exploring in 3D world
   | 'paused'          // In-simulation pause menu active
   | 'exiting';        // Leaving simulation to return to Museum Page

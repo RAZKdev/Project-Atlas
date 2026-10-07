@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Compass, MapPin, Calendar, Camera, Globe, Archive, Sparkles, BookOpen } from 'lucide-react';
+import { ArrowRight, Compass, MapPin, Camera, Archive, BookOpen } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ArchivalImage } from '../../components/ui/ArchivalImage';
 import { Memory, Country, AtlasStats } from '../../core/contracts';
@@ -25,15 +25,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       
       {/* 1. HERO SECTION */}
       <section className="relative min-h-[85vh] flex items-center justify-center overflow-hidden -mt-6">
-        {/* Real-world authentic photography background */}
-        <div className="absolute inset-0 z-0">
-          <img
-            src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=2000&q=85"
-            alt="Kabut lembah Yosemite dan tebing granit yang hening"
-            className="w-full h-full object-cover object-center filter brightness-[0.45] contrast-[1.05]"
-          />
-          {/* Subtle gradient vignette */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#121110] via-[#121110]/40 to-[#121110]/80" />
+        {/* Serene Archival Ambiance (Eliminating unwanted third-party stock photo) */}
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-b from-[#1c1a18] via-[#141312] to-[#121110]" />
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] h-[520px] bg-earth-500/10 rounded-full blur-[140px]" />
+          <div className="absolute inset-0 opacity-[0.035] bg-[radial-gradient(#C9AE92_1px,transparent_1px)] [background-size:24px_24px]" />
+          <div className="absolute right-1/2 translate-x-1/2 top-1/2 -translate-y-1/2 opacity-[0.03] text-earth-300">
+            <Compass className="w-[500px] h-[500px]" />
+          </div>
+          {/* Subtle gradient vignette to blend seamlessly into content */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#121110] via-transparent to-[#121110]/60" />
         </div>
 
         {/* Hero Content */}

@@ -16,7 +16,7 @@
  *   * Procedural Web Audio API dual-oscillator drone (110 Hz A2 fundamental + 165 Hz E3 harmonic)
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Museum3D } from './Museum3D';
 import { MUSEUM_ZONES, type MuseumZone } from '../../data/museumData';
 import { storageService } from '../../core/services/storageService';
@@ -129,21 +129,80 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
     };
   }, []);
 
-  // ── Launch 3D Simulation (Explicit Action Only) ───────────────────────────
-  const startSimulation = () => {
-    setSimulationState('active');
-  };
+  // ── Launch 3D Simulation (Explicit Action Only - Requirement 3 & 7) ───────
+  const startSimulation = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSimulationState('start_requested');
+  }, []);
 
-  // ── Exit 3D Simulation ────────────────────────────────────────────────────
-  const exitSimulation = () => {
+  // ── Simulation Lifecycle State Transitions (Requirement 7) ─────────────────
+  useEffect(() => {
+    let animFrame1: number;
+    let animFrame2: number;
+
+    if (simulationState === 'start_requested') {
+      setSimulationState('loading');
+      animFrame1 = requestAnimationFrame(() => {
+        setSimulationState('ready');
+        animFrame2 = requestAnimationFrame(() => {
+          setSimulationState('active');
+        });
+      });
+    }
+
+    return () => {
+      if (animFrame1) cancelAnimationFrame(animFrame1);
+      if (animFrame2) cancelAnimationFrame(animFrame2);
+    };
+  }, [simulationState]);
+
+  // ── Exit 3D Simulation (Requirement 12) ───────────────────────────────────
+  const exitSimulation = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (document.pointerLockElement) {
       document.exitPointerLock();
     }
-    setSimulationState('idle');
-  };
+    setSimulationState('exiting');
+    const id = requestAnimationFrame(() => {
+      setSimulationState('idle');
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  // ── LOADING / PREPARATION OVERLAY (LIFECYCLE TRANSITION) ──────────────────
+  if (
+    simulationState === 'start_requested' ||
+    simulationState === 'loading' ||
+    simulationState === 'ready'
+  ) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-museum-dark text-parchment-100 select-none p-4 animate-fadeIn">
+        <div className="max-w-md w-full p-8 rounded-3xl border border-museum-gold/60 bg-museum-surface text-center shadow-2xl space-y-6">
+          <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full border-4 border-museum-gold/30 animate-spin border-t-museum-gold" />
+            <span className="text-2xl">🏛️</span>
+          </div>
+          <div>
+            <h3 className="font-serif text-xl font-bold text-parchment-100">
+              Menyiapkan Paviliun Museum 3D
+            </h3>
+            <p className="text-xs font-mono text-parchment-400 mt-2 leading-relaxed">
+              Memuat arsitektur 6×8m (48 m²), 6 zona kuratorial, avatar penjelajah 1.70m, dan sistem kamera multi-POV...
+            </p>
+          </div>
+          <button
+            onClick={exitSimulation}
+            className="px-5 py-2.5 rounded-xl border border-parchment-700 bg-parchment-900/60 text-xs font-mono text-parchment-300 hover:text-white hover:border-red-500/50 transition-colors cursor-pointer"
+          >
+            ✕ Batal & Kembali ke Ikhtisar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ── ACTIVE 3D SIMULATION CONTAINER ────────────────────────────────────────
-  if (simulationState === 'active') {
+  if (simulationState === 'active' || simulationState === 'paused') {
     return (
       <div className="relative w-full bg-museum-dark overflow-hidden" style={{ height: 'calc(100vh - 64px)' }}>
         {/* Top Exit Control Strip */}
@@ -195,7 +254,7 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
           {/* Sub-Tabs Nav */}
           <div className="flex items-center rounded-xl border border-parchment-800 bg-parchment-900/60 p-1 text-xs font-mono">
             <button
-              onClick={() => setActiveSubTab('overview')}
+              onClick={(e) => { e.stopPropagation(); setActiveSubTab('overview'); }}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeSubTab === 'overview'
                   ? 'bg-museum-gold text-museum-dark font-bold shadow'
@@ -205,7 +264,7 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
               🏛️ Ikhtisar
             </button>
             <button
-              onClick={() => setActiveSubTab('memories')}
+              onClick={(e) => { e.stopPropagation(); setActiveSubTab('memories'); }}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeSubTab === 'memories'
                   ? 'bg-museum-gold text-museum-dark font-bold shadow'
@@ -215,7 +274,7 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
               📸 Memori ({memories.length})
             </button>
             <button
-              onClick={() => setActiveSubTab('gallery')}
+              onClick={(e) => { e.stopPropagation(); setActiveSubTab('gallery'); }}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeSubTab === 'gallery'
                   ? 'bg-museum-gold text-museum-dark font-bold shadow'
@@ -225,7 +284,7 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
               🏺 Galeri Zona
             </button>
             <button
-              onClick={() => setActiveSubTab('info')}
+              onClick={(e) => { e.stopPropagation(); setActiveSubTab('info'); }}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeSubTab === 'info'
                   ? 'bg-museum-gold text-museum-dark font-bold shadow'
@@ -277,7 +336,10 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
                 {/* Explicit Start Simulation Button */}
                 <div className="pt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
                   <button
-                    onClick={startSimulation}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startSimulation();
+                    }}
                     className="flex items-center justify-center gap-3 px-8 py-4 rounded-2xl bg-gradient-to-r from-museum-gold to-amber-500 text-museum-dark font-mono font-bold text-sm sm:text-base uppercase tracking-wider hover:brightness-110 active:scale-98 transition-all shadow-[0_0_24px_rgba(212,168,67,0.4)] cursor-pointer"
                   >
                     <span className="text-xl">🏛️</span>
@@ -465,10 +527,13 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
                   <div className="pt-2 border-t border-parchment-850 flex items-center justify-between text-xs font-mono">
                     <span className="text-parchment-400">Koordinat: [{zone.position.join(', ')}]</span>
                     <button
-                      onClick={startSimulation}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedZone(zone);
+                      }}
                       className="text-museum-gold hover:underline font-bold flex items-center gap-1 cursor-pointer"
                     >
-                      <span>Jelajahi di 3D</span>
+                      <span>Lihat Detail Zona</span>
                       <span>→</span>
                     </button>
                   </div>
@@ -608,6 +673,76 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
           onClose={() => setSelectedExhibit(null)}
           onSelectCountry={onSelectCountry}
         />
+      )}
+
+      {/* ── 2D Zone Curatorial Modal (Requirement 2 & 3 - Never starts 3D directly) ── */}
+      {selectedZone && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn"
+          onClick={() => setSelectedZone(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-3xl border border-museum-gold/60 bg-museum-surface p-6 sm:p-8 text-parchment-100 shadow-2xl space-y-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between border-b border-parchment-800 pb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl p-2.5 rounded-2xl bg-parchment-900 border border-parchment-750">
+                  {selectedZone.icon}
+                </span>
+                <div>
+                  <h3 className="font-serif text-xl font-bold text-parchment-100">{selectedZone.name}</h3>
+                  <span className="text-[10px] font-mono text-museum-gold uppercase tracking-wider">
+                    Zona Kurasi Museum Mini · 6×8m
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedZone(null)}
+                className="text-parchment-400 hover:text-white p-2 rounded-lg text-lg cursor-pointer"
+                aria-label="Tutup Detail Zona"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs font-mono text-parchment-300">
+              <p className="font-sans text-sm text-parchment-200 leading-relaxed">
+                {selectedZone.description}
+              </p>
+              <div className="p-4 rounded-xl bg-parchment-900/60 border border-parchment-800 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-parchment-400">Koordinat Dalam Ruang:</span>
+                  <span className="text-museum-gold font-bold">[{selectedZone.position.join(', ')}] meter</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-parchment-400">Dimensi Paviliun:</span>
+                  <span className="text-parchment-200 font-bold">6.00 × 8.00 m (48 m²)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button
+                onClick={() => setSelectedZone(null)}
+                className="flex-1 py-2.5 rounded-xl border border-parchment-700 bg-parchment-900/60 text-parchment-200 hover:text-white font-mono text-xs transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedZone(null);
+                  setActiveSubTab('overview');
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-museum-gold text-museum-dark font-mono font-bold text-xs uppercase tracking-wider hover:brightness-110 transition-all cursor-pointer shadow-lg"
+              >
+                Buka Tab Ikhtisar →
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
