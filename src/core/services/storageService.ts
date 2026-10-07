@@ -2,6 +2,7 @@ import { Country, Memory, Souvenir, AtlasStats } from '../contracts';
 import { INITIAL_COUNTRIES } from '../../data/countries';
 import { SEED_MEMORIES, INITIAL_UPDATED_COUNTRIES } from '../../data/seedData';
 import { CANONICAL_COUNTRIES } from '../../atlas/countries/canonicalCountries';
+import { mediaStore } from './mediaStore';
 
 const STORAGE_KEYS = {
   COUNTRIES: 'project_atlas_countries_v1',
@@ -273,16 +274,29 @@ class StorageService {
     };
   }
 
-  // --- V2: Backup & Restore ---
-  public async createBackupArchive(): Promise<string> {
+  // --- V2: Backup & Restore with Atomic Staging & Rollback Protection ---
+  public async createBackupArchive(options: { includeMedia?: boolean } = { includeMedia: true }): Promise<string> {
+    let mediaBlobs: Array<{ id: string; name: string; mimeType: string; dataUrl: string }> | undefined = undefined;
+    if (options.includeMedia && typeof window !== 'undefined') {
+      try {
+        const exported = await mediaStore.exportAllMediaBlobs();
+        if (exported.length > 0) {
+          mediaBlobs = exported;
+        }
+      } catch (err) {
+        console.warn('Could not export media blobs for archive:', err);
+      }
+    }
+
     const backup = {
-      version: '2.0',
+      version: '2.1',
       exportedAt: new Date().toISOString(),
       appName: 'Project Atlas',
       stats: this.getStats(),
       countries: this.countries.filter(c => c.status !== 'unknown'),
       memories: this.memories,
       souvenirs: this.souvenirs,
+      mediaBlobs,
     };
     return JSON.stringify(backup, null, 2);
   }
@@ -290,59 +304,122 @@ class StorageService {
   public async importBackupArchive(
     rawJson: string,
     mode: 'merge' | 'replace' = 'merge'
-  ): Promise<{ memoriesCount: number; countriesCount: number }> {
-    const data = JSON.parse(rawJson);
+  ): Promise<{ memoriesCount: number; countriesCount: number; mediaCount: number }> {
+    // Step 1: Parse
+    let data: any;
+    try {
+      data = JSON.parse(rawJson);
+    } catch {
+      throw new Error('Format arsip tidak valid: Gagal mem-parse JSON.');
+    }
 
+    // Step 2: Validate Schema & Constraints
+    if (!data || typeof data !== 'object') {
+      throw new Error('Format arsip tidak valid: Payload kosong atau bukan objek.');
+    }
     if (!data.memories || !Array.isArray(data.memories)) {
-      throw new Error('Invalid archive format: missing memories array.');
+      throw new Error('Format arsip tidak valid: Array memories tidak ditemukan.');
     }
 
-    if (mode === 'replace') {
-      this.clearAllToEmpty();
-      this.memories = data.memories;
-      this.souvenirs = data.souvenirs || [];
-      if (data.countries && Array.isArray(data.countries)) {
-        data.countries.forEach((incoming: Country) => {
-          const idx = this.countries.findIndex(c => c.code === incoming.code);
-          if (idx >= 0) {
-            this.countries[idx] = { ...this.countries[idx], ...incoming };
-          }
-        });
+    // Validate memory records
+    for (const mem of data.memories) {
+      if (!mem || typeof mem !== 'object') {
+        throw new Error('Format arsip tidak valid: Terdapat memori yang korup.');
       }
-    } else {
-      // Merge mode
-      const existingIds = new Set(this.memories.map(m => m.id));
-      for (const incomingMem of data.memories) {
-        if (!existingIds.has(incomingMem.id)) {
-          this.memories.push(incomingMem);
-        }
-      }
-
-      if (data.countries && Array.isArray(data.countries)) {
-        data.countries.forEach((incoming: Country) => {
-          const idx = this.countries.findIndex(c => c.code === incoming.code);
-          if (idx >= 0) {
-            // Upgrade status if incoming is more advanced
-            this.countries[idx] = { ...this.countries[idx], ...incoming };
-          }
-        });
-      }
-
-      if (data.souvenirs && Array.isArray(data.souvenirs)) {
-        const existingSouvenirIds = new Set(this.souvenirs.map(s => s.id));
-        for (const s of data.souvenirs) {
-          if (!existingSouvenirIds.has(s.id)) {
-            this.souvenirs.push(s);
-          }
-        }
+      if (typeof mem.countryCode !== 'string' || !mem.countryCode) {
+        throw new Error('Format arsip tidak valid: Memori kehilangan kode negara.');
       }
     }
 
-    this.save();
-    return {
-      memoriesCount: this.memories.length,
-      countriesCount: this.countries.filter(c => c.status === 'documented').length,
-    };
+    // Step 3: Safety Checkpoint (In-memory transaction snapshot)
+    const originalCountries = JSON.parse(JSON.stringify(this.countries));
+    const originalMemories = JSON.parse(JSON.stringify(this.memories));
+    const originalSouvenirs = JSON.parse(JSON.stringify(this.souvenirs));
+
+    try {
+      // Step 4: Stage Changes
+      let stagedCountries: Country[];
+      let stagedMemories: Memory[];
+      let stagedSouvenirs: Souvenir[];
+
+      if (mode === 'replace') {
+        stagedCountries = this.buildInitialCountries().map(c => ({ ...c, status: 'unknown' as const }));
+        stagedMemories = [...data.memories];
+        stagedSouvenirs = Array.isArray(data.souvenirs) ? [...data.souvenirs] : [];
+
+        if (data.countries && Array.isArray(data.countries)) {
+          data.countries.forEach((incoming: Country) => {
+            if (!incoming || !incoming.code) return;
+            const idx = stagedCountries.findIndex(c => c.code.toUpperCase() === incoming.code.toUpperCase());
+            if (idx >= 0) {
+              stagedCountries[idx] = { ...stagedCountries[idx], ...incoming };
+            }
+          });
+        }
+      } else {
+        // Merge mode
+        stagedCountries = JSON.parse(JSON.stringify(this.countries));
+        stagedMemories = [...this.memories];
+        stagedSouvenirs = [...this.souvenirs];
+
+        const existingMemIds = new Set(stagedMemories.map(m => m.id));
+        for (const incomingMem of data.memories) {
+          if (!existingMemIds.has(incomingMem.id)) {
+            stagedMemories.push(incomingMem);
+            existingMemIds.add(incomingMem.id);
+          }
+        }
+
+        if (data.countries && Array.isArray(data.countries)) {
+          data.countries.forEach((incoming: Country) => {
+            if (!incoming || !incoming.code) return;
+            const idx = stagedCountries.findIndex(c => c.code.toUpperCase() === incoming.code.toUpperCase());
+            if (idx >= 0) {
+              stagedCountries[idx] = { ...stagedCountries[idx], ...incoming };
+            }
+          });
+        }
+
+        if (data.souvenirs && Array.isArray(data.souvenirs)) {
+          const existingSouvIds = new Set(stagedSouvenirs.map(s => s.id));
+          for (const s of data.souvenirs) {
+            if (!existingSouvIds.has(s.id)) {
+              stagedSouvenirs.push(s);
+              existingSouvIds.add(s.id);
+            }
+          }
+        }
+      }
+
+      // Step 5: Restore Media Blobs if present
+      let importedMediaCount = 0;
+      if (Array.isArray(data.mediaBlobs) && data.mediaBlobs.length > 0 && typeof window !== 'undefined') {
+        try {
+          importedMediaCount = await mediaStore.importMediaBlobs(data.mediaBlobs);
+        } catch (mediaErr) {
+          console.warn('Gagal memulihkan sebagian media blob:', mediaErr);
+        }
+      }
+
+      // Step 6: Commit Transaction to Production State
+      this.countries = stagedCountries;
+      this.memories = stagedMemories;
+      this.souvenirs = stagedSouvenirs;
+      this.save();
+
+      return {
+        memoriesCount: this.memories.length,
+        countriesCount: this.countries.filter(c => c.status === 'documented').length,
+        mediaCount: importedMediaCount,
+      };
+    } catch (transactionErr) {
+      // Step 7: Rollback to Safety Checkpoint on failure
+      this.countries = originalCountries;
+      this.memories = originalMemories;
+      this.souvenirs = originalSouvenirs;
+      this.save();
+      throw transactionErr;
+    }
   }
 
   // --- Admin / Diagnostics ---

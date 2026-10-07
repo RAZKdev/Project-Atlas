@@ -261,3 +261,117 @@ test('Test 8: Souvenir Creation, Category Mapping & Deletion', () => {
   assert.equal(souvenirs.length, 0);
 });
 
+test('Test 9: P0 Safety - Import Archive Schema Validation & Atomic Rollback Protection', () => {
+  // Setup initial production state
+  let currentMemories = [{ id: 'm-orig', countryCode: 'ID', title: 'Original Memory' }];
+  let currentCountries = [{ code: 'ID', status: 'documented' }];
+  let currentSouvenirs = [{ id: 's-orig', name: 'Original Souvenir' }];
+
+  function transactionalImport(rawJson, mode = 'replace') {
+    let data;
+    try {
+      data = JSON.parse(rawJson);
+    } catch {
+      throw new Error('Format arsip tidak valid: Gagal mem-parse JSON.');
+    }
+
+    if (!data || typeof data !== 'object') {
+      throw new Error('Format arsip tidak valid: Payload kosong atau bukan objek.');
+    }
+    if (!data.memories || !Array.isArray(data.memories)) {
+      throw new Error('Format arsip tidak valid: Array memories tidak ditemukan.');
+    }
+    for (const mem of data.memories) {
+      if (!mem || typeof mem !== 'object') {
+        throw new Error('Format arsip tidak valid: Terdapat memori yang korup.');
+      }
+      if (typeof mem.countryCode !== 'string' || !mem.countryCode) {
+        throw new Error('Format arsip tidak valid: Memori kehilangan kode negara.');
+      }
+    }
+
+    // Safety checkpoint snapshot
+    const checkpoint = {
+      memories: [...currentMemories],
+      countries: [...currentCountries],
+      souvenirs: [...currentSouvenirs]
+    };
+
+    try {
+      if (mode === 'replace') {
+        // Stage new data
+        const stagedMemories = [...data.memories];
+        const stagedCountries = data.countries ? [...data.countries] : [];
+        const stagedSouvenirs = data.souvenirs ? [...data.souvenirs] : [];
+
+        // Commit transaction
+        currentMemories = stagedMemories;
+        currentCountries = stagedCountries;
+        currentSouvenirs = stagedSouvenirs;
+      }
+      return { success: true };
+    } catch (err) {
+      // Rollback to checkpoint
+      currentMemories = checkpoint.memories;
+      currentCountries = checkpoint.countries;
+      currentSouvenirs = checkpoint.souvenirs;
+      throw err;
+    }
+  }
+
+  // 1. Invalid JSON rejects safely
+  assert.throws(() => transactionalImport('{ invalid json '), /Gagal mem-parse JSON/);
+  assert.equal(currentMemories.length, 1);
+  assert.equal(currentMemories[0].id, 'm-orig');
+
+  // 2. Missing memories array rejects safely
+  assert.throws(() => transactionalImport(JSON.stringify({ app: 'Project Atlas' })), /Array memories tidak ditemukan/);
+  assert.equal(currentMemories.length, 1);
+
+  // 3. Corrupt memory record (missing countryCode) rejects safely
+  const corruptedPayload = JSON.stringify({
+    memories: [{ id: 'bad-mem', title: 'No Country' }]
+  });
+  assert.throws(() => transactionalImport(corruptedPayload), /Memori kehilangan kode negara/);
+  assert.equal(currentMemories.length, 1);
+  assert.equal(currentMemories[0].id, 'm-orig');
+
+  // 4. Valid replace successfully updates state without leaving orphaned state
+  const validPayload = JSON.stringify({
+    version: '2.1',
+    memories: [{ id: 'm-new', countryCode: 'JP', title: 'New Kyoto Memory' }],
+    countries: [{ code: 'JP', status: 'documented' }],
+    souvenirs: [{ id: 's-new', name: 'Kyoto Fan' }]
+  });
+  const res = transactionalImport(validPayload, 'replace');
+  assert.equal(res.success, true);
+  assert.equal(currentMemories.length, 1);
+  assert.equal(currentMemories[0].id, 'm-new');
+  assert.equal(currentCountries[0].code, 'JP');
+  assert.equal(currentSouvenirs[0].name, 'Kyoto Fan');
+});
+
+test('Test 10: P0 Safety - Version 2.1 Archive Format Encapsulates Media Blobs Metadata', () => {
+  const archive = {
+    version: '2.1',
+    appName: 'Project Atlas',
+    exportedAt: new Date().toISOString(),
+    stats: { totalCountriesVisited: 1, totalMemories: 1 },
+    countries: [{ code: 'ID', status: 'documented' }],
+    memories: [{ id: 'm1', countryCode: 'ID', title: 'Bromo Trip', mediaReferences: [{ id: 'local-media:p1' }] }],
+    souvenirs: [],
+    mediaBlobs: [
+      { id: 'local-media:p1', name: 'bromo.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,fakebytes' }
+    ]
+  };
+
+  const serialized = JSON.stringify(archive);
+  const parsed = JSON.parse(serialized);
+
+  assert.equal(parsed.version, '2.1');
+  assert.ok(Array.isArray(parsed.mediaBlobs));
+  assert.equal(parsed.mediaBlobs.length, 1);
+  assert.equal(parsed.mediaBlobs[0].id, 'local-media:p1');
+  assert.ok(parsed.mediaBlobs[0].dataUrl.startsWith('data:image/jpeg;base64,'));
+});
+

@@ -261,6 +261,76 @@ class MediaStore {
       usagePercentage: 0,
     };
   }
+
+  /**
+   * Export all media blobs as base64 data URLs for full archive backup.
+   */
+  public async exportAllMediaBlobs(): Promise<Array<{ id: string; name: string; mimeType: string; dataUrl: string }>> {
+    if (typeof indexedDB === 'undefined') return [];
+    try {
+      const db = await this.getDB();
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.getAll();
+
+        request.onsuccess = async () => {
+          const records = request.result || [];
+          const exports: Array<{ id: string; name: string; mimeType: string; dataUrl: string }> = [];
+
+          for (const item of records) {
+            if (item && item.blob instanceof Blob) {
+              const dataUrl = await new Promise<string>((res) => {
+                const reader = new FileReader();
+                reader.onloadend = () => res((reader.result as string) || '');
+                reader.onerror = () => res('');
+                reader.readAsDataURL(item.blob);
+              });
+              if (dataUrl) {
+                exports.push({
+                  id: item.id,
+                  name: item.name || 'unnamed-media',
+                  mimeType: item.mimeType || item.blob.type,
+                  dataUrl,
+                });
+              }
+            }
+          }
+          resolve(exports);
+        };
+        request.onerror = () => resolve([]);
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Import media blobs from archive into IndexedDB.
+   */
+  public async importMediaBlobs(records: Array<{ id: string; name: string; mimeType: string; dataUrl: string }>): Promise<number> {
+    if (!records || !Array.isArray(records) || records.length === 0 || typeof indexedDB === 'undefined') return 0;
+    try {
+      const db = await this.getDB();
+      let importedCount = 0;
+
+      for (const item of records) {
+        if (!item || !item.dataUrl || !item.id) continue;
+        try {
+          const res = await fetch(item.dataUrl);
+          const blob = await res.blob();
+          const cleanId = item.id.replace(/^local-media:/, '');
+          await this.saveMediaBlob(cleanId, blob, item.name);
+          importedCount++;
+        } catch (err) {
+          console.warn('Gagal memulihkan sebagian media blob:', item.id, err);
+        }
+      }
+      return importedCount;
+    } catch {
+      return 0;
+    }
+  }
 }
 
 export const mediaStore = new MediaStore();
