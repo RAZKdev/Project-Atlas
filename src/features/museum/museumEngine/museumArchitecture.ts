@@ -35,6 +35,7 @@
 import * as THREE from 'three';
 import { type CollisionBox } from './types';
 import { buildFountainSystem } from './water/fountainSystem';
+import { buildVegetationSystem } from './environment/vegetationSystem';
 
 export interface ArchitectureResult {
   group: THREE.Group;
@@ -861,139 +862,10 @@ export function buildMuseumArchitecture(): ArchitectureResult {
   group.add(southGable);
 
   // ── 11. GARDEN VEGETATION & LANDSCAPING DETAILS ──────────────────────────────
-  // Boxwood Hedges framing the central walkway & fountain plaza
-  const makeHedge = (x: number, z: number, length: number, rotY: number = 0) => {
-    const hedgeGeo = new THREE.BoxGeometry(0.50, 0.85, length);
-    const hedge = new THREE.Mesh(hedgeGeo, matHedge);
-    hedge.position.set(x, 0.85 / 2, z);
-    hedge.rotation.y = rotY;
-    hedge.castShadow = true;
-    hedge.receiveShadow = true;
-    group.add(hedge);
-
-    // Collider for hedge
-    const halfX = (rotY === 0 ? 0.25 : length / 2);
-    const halfZ = (rotY === 0 ? length / 2 : 0.25);
-    colliders.push({
-      min: [x - halfX, 0, z - halfZ],
-      max: [x + halfX, 0.85, z + halfZ],
-      name: 'hedge',
-    });
-  };
-
-  // Main walk flanking hedges (left and right)
-  makeHedge(-2.10, 8.5, 6.2);
-  makeHedge(2.10, 8.5, 6.2);
-
-  // Plaza quadrant perimeter curved hedges
-  makeHedge(-5.0, 11.5, 3.2, Math.PI / 4);
-  makeHedge(5.0, 11.5, 3.2, -Math.PI / 4);
-  makeHedge(-5.0, 17.5, 3.2, -Math.PI / 4);
-  makeHedge(5.0, 17.5, 3.2, Math.PI / 4);
-
-  // Perennial Flower Planting Beds along the pavilion foundation
-  const makeFlowerBed = (x: number, z: number, w: number, d: number) => {
-    const bedGeo = new THREE.BoxGeometry(w, 0.12, d);
-    const bed = new THREE.Mesh(bedGeo, matHedge);
-    bed.position.set(x, 0.06, z);
-    group.add(bed);
-
-    // Sprinkle flower spheres
-    for (let i = 0; i < 6; i++) {
-      const fx = x + (Math.random() - 0.5) * (w - 0.2);
-      const fz = z + (Math.random() - 0.5) * (d - 0.2);
-      const flMat = i % 3 === 0 ? matFlowerRose : i % 3 === 1 ? matFlowerLavender : matFlowerGold;
-      const fl = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), flMat);
-      fl.position.set(fx, 0.16 + Math.random() * 0.08, fz);
-      group.add(fl);
-    }
-  };
-
-  makeFlowerBed(-4.2, 0.5, 1.2, 8.0); // West foundation bed
-  makeFlowerBed(4.2, 0.5, 1.2, 8.0);  // East foundation bed
-  makeFlowerBed(-2.2, 4.3, 1.2, 0.8); // South-west bed
-  makeFlowerBed(2.2, 4.3, 1.2, 0.8);  // South-east bed
-
-  // Italian Cypress Trees (6m tall, slender columnar shape)
-  const makeCypress = (x: number, z: number) => {
-    const tree = new THREE.Group();
-    tree.position.set(x, 0, z);
-
-    // Trunk
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 1.2, 8), matTreeBark);
-    trunk.position.y = 0.6;
-    trunk.castShadow = true;
-    tree.add(trunk);
-
-    // Columnar foliage (3 tiered cones)
-    const cone1 = new THREE.Mesh(new THREE.ConeGeometry(0.85, 2.4, 8), matTreeLeaves);
-    cone1.position.y = 2.1;
-    cone1.castShadow = true;
-    tree.add(cone1);
-
-    const cone2 = new THREE.Mesh(new THREE.ConeGeometry(0.70, 2.2, 8), matTreeLeaves);
-    cone2.position.y = 3.6;
-    cone2.castShadow = true;
-    tree.add(cone2);
-
-    const cone3 = new THREE.Mesh(new THREE.ConeGeometry(0.48, 1.8, 8), matTreeLeaves);
-    cone3.position.y = 4.8;
-    cone3.castShadow = true;
-    tree.add(cone3);
-
-    group.add(tree);
-
-    colliders.push({
-      min: [x - 0.3, 0, z - 0.3],
-      max: [x + 0.3, 4.0, z + 0.3],
-      name: 'cypress_tree',
-    });
-  };
-
-  // Cypress positions
-  makeCypress(-8.0, 4.5);
-  makeCypress(8.0, 4.5);
-  makeCypress(-11.5, 14.5);
-  makeCypress(11.5, 14.5);
-  makeCypress(-8.0, 22.0);
-  makeCypress(8.0, 22.0);
-
-  // Mediterranean Olive / Shade Trees (4.2m tall, umbrella canopy)
-  const makeOliveTree = (x: number, z: number) => {
-    const tree = new THREE.Group();
-    tree.position.set(x, 0, z);
-
-    // Trunk (gnarled shape)
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 2.0, 8), matTreeBark);
-    trunk.position.y = 1.0;
-    trunk.castShadow = true;
-    tree.add(trunk);
-
-    // Canopy (spherical clusters)
-    const canopy1 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.4), matTreeLeaves);
-    canopy1.position.set(0, 2.8, 0);
-    canopy1.scale.set(1.4, 0.85, 1.4);
-    canopy1.castShadow = true;
-    tree.add(canopy1);
-
-    const canopy2 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.9), matTreeLeaves);
-    canopy2.position.set(0.6, 3.2, 0.4);
-    canopy2.castShadow = true;
-    tree.add(canopy2);
-
-    group.add(tree);
-
-    colliders.push({
-      min: [x - 0.4, 0, z - 0.4],
-      max: [x + 0.4, 3.5, z + 0.4],
-      name: 'olive_tree',
-    });
-  };
-
-  makeOliveTree(-13.5, 6.0);
-  makeOliveTree(13.5, 6.0);
-  makeOliveTree(-13.5, 20.0);
-  makeOliveTree(13.5, 20.0);
+  const vegetation = buildVegetationSystem();
+  group.add(vegetation.group);
+  colliders.push(...vegetation.colliders);
+  animUpdaters.push((delta, elapsed) => vegetation.update(delta, elapsed));
 
   // ── 12. GARDEN FURNITURE & AMENITIES ─────────────────────────────────────────
   // Park Benches (Teak wood slats with dark cast-iron scroll legs)
