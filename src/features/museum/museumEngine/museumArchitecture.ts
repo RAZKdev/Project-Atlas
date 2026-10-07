@@ -34,6 +34,7 @@
 
 import * as THREE from 'three';
 import { type CollisionBox } from './types';
+import { buildFountainSystem } from './water/fountainSystem';
 
 export interface ArchitectureResult {
   group: THREE.Group;
@@ -342,141 +343,11 @@ export function buildMuseumArchitecture(): ArchitectureResult {
   connWest.position.set(-5.5, 0.03, 14.5);
   group.add(connWest);
 
-  // ── 3. CENTRAL FOUNTAIN (FOCAL POINT AT z = 14.5m) ─────────────────────────
-  // Outer Basin: Carved limestone octagonal basin, outer radius 2.40m, height 0.48m
-  const fRadius = 2.40;
-  const fWallH = 0.48;
-  const fThick = 0.25;
-
-  const fBasinOuterGeo = new THREE.CylinderGeometry(fRadius, fRadius + 0.08, fWallH, 16);
-  const fBasinOuter = new THREE.Mesh(fBasinOuterGeo, matFountainStone);
-  fBasinOuter.position.set(0, fWallH / 2, 14.5);
-  fBasinOuter.castShadow = true;
-  fBasinOuter.receiveShadow = true;
-  group.add(fBasinOuter);
-
-  // Basin molded coping rim
-  const fRimGeo = new THREE.TorusGeometry(fRadius, 0.09, 12, 24);
-  const fRim = new THREE.Mesh(fRimGeo, matFountainStone);
-  fRim.rotation.x = Math.PI / 2;
-  fRim.position.set(0, fWallH, 14.5);
-  fRim.castShadow = true;
-  group.add(fRim);
-
-  // Lower Water Pool: Transmissive cyan water disc at y = 0.40m
-  const waterPoolRadius = fRadius - fThick;
-  const waterPoolGeo = new THREE.CircleGeometry(waterPoolRadius, 32);
-  const waterPool = new THREE.Mesh(waterPoolGeo, matWater);
-  waterPool.rotation.x = -Math.PI / 2;
-  waterPool.position.set(0, 0.40, 14.5);
-  group.add(waterPool);
-
-  // Fountain Centerpiece: Classical carved pedestal & upper tier
-  const pedBaseGeo = new THREE.CylinderGeometry(0.55, 0.65, 0.35, 16);
-  const pedBase = new THREE.Mesh(pedBaseGeo, matFountainStone);
-  pedBase.position.set(0, 0.175, 14.5);
-  pedBase.castShadow = true;
-  group.add(pedBase);
-
-  const pedStemGeo = new THREE.CylinderGeometry(0.24, 0.32, 0.85, 16);
-  const pedStem = new THREE.Mesh(pedStemGeo, matFountainStone);
-  pedStem.position.set(0, 0.35 + 0.425, 14.5);
-  pedStem.castShadow = true;
-  group.add(pedStem);
-
-  // Upper Basin Bowl (Radius 0.85m at y = 1.25m)
-  const upperBowlGeo = new THREE.CylinderGeometry(0.85, 0.35, 0.28, 16);
-  const upperBowl = new THREE.Mesh(upperBowlGeo, matFountainStone);
-  upperBowl.position.set(0, 1.25, 14.5);
-  upperBowl.castShadow = true;
-  group.add(upperBowl);
-
-  const upperRimGeo = new THREE.TorusGeometry(0.85, 0.05, 8, 20);
-  const upperRim = new THREE.Mesh(upperRimGeo, matBrass);
-  upperRim.rotation.x = Math.PI / 2;
-  upperRim.position.set(0, 1.39, 14.5);
-  group.add(upperRim);
-
-  // Upper bowl water disc
-  const upperWaterGeo = new THREE.CircleGeometry(0.80, 16);
-  const upperWater = new THREE.Mesh(upperWaterGeo, matWater);
-  upperWater.rotation.x = -Math.PI / 2;
-  upperWater.position.set(0, 1.37, 14.5);
-  group.add(upperWater);
-
-  // Top Finial Urn / Jet Nozzle at y = 1.60m
-  const nozzleGeo = new THREE.CylinderGeometry(0.12, 0.18, 0.35, 12);
-  const nozzle = new THREE.Mesh(nozzleGeo, matBrass);
-  nozzle.position.set(0, 1.55, 14.5);
-  nozzle.castShadow = true;
-  group.add(nozzle);
-
-  // Animated Water Feature: Central bubbling plume & cascading stream arcs
-  const jetGroup = new THREE.Group();
-  jetGroup.position.set(0, 1.72, 14.5);
-
-  const jetCoreGeo = new THREE.CylinderGeometry(0.04, 0.14, 0.70, 8);
-  const jetCore = new THREE.Mesh(jetCoreGeo, matWaterSpray);
-  jetCore.position.y = 0.35;
-  jetGroup.add(jetCore);
-
-  const jetTopGeo = new THREE.SphereGeometry(0.16, 8, 8);
-  const jetTop = new THREE.Mesh(jetTopGeo, matWaterSpray);
-  jetTop.position.y = 0.72;
-  jetGroup.add(jetTop);
-  group.add(jetGroup);
-
-  // 4 Parabolic cascading water stream ribbons from upper bowl to lower pool
-  const cascadeCurves: THREE.Mesh[] = [];
-  for (let i = 0; i < 4; i++) {
-    const angle = (i * Math.PI) / 2 + Math.PI / 4;
-    const cascadeGeo = new THREE.TubeGeometry(
-      new THREE.CatmullRomCurve3([
-        new THREE.Vector3(Math.cos(angle) * 0.80, 1.35, Math.sin(angle) * 0.80 + 14.5),
-        new THREE.Vector3(Math.cos(angle) * 1.30, 0.95, Math.sin(angle) * 1.30 + 14.5),
-        new THREE.Vector3(Math.cos(angle) * 1.65, 0.42, Math.sin(angle) * 1.65 + 14.5),
-      ]),
-      12,
-      0.028,
-      6,
-      false
-    );
-    const cascadeMesh = new THREE.Mesh(cascadeGeo, matWaterSpray);
-    group.add(cascadeMesh);
-    cascadeCurves.push(cascadeMesh);
-  }
-
-  // Expanding Water Ripples Mesh on lower pool
-  const rippleGeo = new THREE.RingGeometry(0.2, 0.28, 24);
-  const rippleMat = new THREE.MeshBasicMaterial({
-    color: 0x9be8e8,
-    transparent: true,
-    opacity: 0.5,
-    depthWrite: false,
-  });
-  const rippleMesh = new THREE.Mesh(rippleGeo, rippleMat);
-  rippleMesh.rotation.x = -Math.PI / 2;
-  rippleMesh.position.set(0, 0.405, 14.5);
-  group.add(rippleMesh);
-
-  // Fountain Animation Loop hook
-  animUpdaters.push((_delta: number, elapsed: number) => {
-    // Jet spray pulsation
-    const pulse = Math.sin(elapsed * 4.5) * 0.08;
-    jetGroup.scale.set(1.0 + pulse * 0.5, 1.0 + pulse, 1.0 + pulse * 0.5);
-
-    // Ripple expansion & fade
-    const rippleScale = 1.0 + ((elapsed * 0.8) % 1.0) * 6.5;
-    rippleMesh.scale.set(rippleScale, rippleScale, 1);
-    rippleMat.opacity = Math.max(0, 0.55 * (1.0 - ((elapsed * 0.8) % 1.0)));
-  });
-
-  // Solid AABB Colliders for Fountain Basin (Player cannot walk through solid stone basin)
-  colliders.push({
-    min: [-fRadius, 0, 14.5 - fRadius],
-    max: [fRadius, fWallH + 0.2, 14.5 + fRadius],
-    name: 'fountain_basin',
-  });
+  // ── 3. HERO CENTRAL FOUNTAIN (FOCAL POINT AT z = 14.5m) ─────────────────────
+  const fountain = buildFountainSystem();
+  group.add(fountain.group);
+  colliders.push(fountain.collider);
+  animUpdaters.push((delta, elapsed) => fountain.update(delta, elapsed));
 
   // ── 4. RAISED CONCRETE PAVILION FOUNDATION (y: 0 to 0.50m) ───────────────────
   // Footprint: 6.40 m wide x 8.40 m deep x 0.50 m high (centered at x=0, z=0)
