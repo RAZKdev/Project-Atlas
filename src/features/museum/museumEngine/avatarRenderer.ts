@@ -237,7 +237,17 @@ export class AvatarRenderer {
     this.torsoMesh = addMesh(this.spineGroup, new THREE.BoxGeometry(0.36, 0.5, 0.24), matJacket, 0, 0.25, 0);
     const strap = addMesh(this.spineGroup, new THREE.BoxGeometry(0.04, 0.54, 0.26), matLeather, 0.06, 0.26, 0, false);
     strap.rotation.z = Math.PI / 8;
+    // Satchel pouch with front flap & brass closure
     addMesh(this.spineGroup, new THREE.BoxGeometry(0.12, 0.22, 0.26), matLeather, -0.21, 0.06, -0.04);
+    addMesh(this.spineGroup, new THREE.BoxGeometry(0.03, 0.04, 0.02), matBrass, -0.21, 0.06, 0.10, false);
+
+    // Front center brass buttons on jacket placket
+    for (let by = 0.14; by <= 0.36; by += 0.10) {
+      addMesh(this.spineGroup, new THREE.SphereGeometry(0.014, 6, 6), matBrass, 0, by, 0.125, false);
+    }
+    // Jacket chest pocket flaps
+    addMesh(this.spineGroup, new THREE.BoxGeometry(0.08, 0.02, 0.02), matJacket, -0.09, 0.32, 0.125, false);
+    addMesh(this.spineGroup, new THREE.BoxGeometry(0.08, 0.02, 0.02), matJacket, 0.09, 0.32, 0.125, false);
 
     // Head (pivot at neck base, world ≈ 1.52 m)
     this.headGroup = new THREE.Group();
@@ -246,8 +256,15 @@ export class AvatarRenderer {
     addMesh(this.headGroup, new THREE.CylinderGeometry(0.06, 0.07, 0.08, 12), matSkin, 0, 0, 0, false);
     const head = addMesh(this.headGroup, new THREE.SphereGeometry(0.11, 16, 16), matSkin, 0, 0.11, 0);
     head.scale.set(1.0, 1.15, 1.05);
+
+    // Explorer Fedora Hat (crown + curved brim)
     addMesh(this.headGroup, new THREE.CylinderGeometry(0.1, 0.12, 0.09, 16), matHat, 0, 0.2, -0.01, false); // crown top = 1.70 m
-    addMesh(this.headGroup, new THREE.CylinderGeometry(0.18, 0.18, 0.02, 16), matHat, 0, 0.16, 0, false);
+    addMesh(this.headGroup, new THREE.CylinderGeometry(0.18, 0.18, 0.02, 16), matHat, 0, 0.16, 0, false); // brim
+
+    // Brass Expedition Goggles strapped to hat crown
+    addMesh(this.headGroup, new THREE.TorusGeometry(0.028, 0.007, 8, 16), matBrass, -0.045, 0.20, 0.10, false);
+    addMesh(this.headGroup, new THREE.TorusGeometry(0.028, 0.007, 8, 16), matBrass, 0.045, 0.20, 0.10, false);
+    addMesh(this.headGroup, new THREE.CylinderGeometry(0.112, 0.112, 0.016, 16), matLeather, 0, 0.20, -0.01, false);
 
     // ── Legs: hip → knee → ankle ────────────────────────────────────────────
     const upperLegGeo = new THREE.BoxGeometry(0.13, LEG.upper, 0.14);
