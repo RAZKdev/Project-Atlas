@@ -64,8 +64,53 @@ export function buildFountainSystem(): FountainResult {
     ior: 1.333,
     transparent: true,
     opacity: 0.90,
-    reflectivity: 0.65,
   });
+
+  // Dedicated Real-Time GPU Water Shader Hook (onBeforeCompile)
+  const waterUniforms = {
+    uTime: { value: 0 },
+  };
+
+  matWater.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = waterUniforms.uTime;
+
+    shader.vertexShader = `
+      uniform float uTime;
+      ${shader.vertexShader}
+    `.replace(
+      '#include <begin_vertex>',
+      `
+      #include <begin_vertex>
+      // Multi-harmonic concentric water ripples emanating from fountain center
+      float rDist = length(position.xy);
+      float rippleWave = sin(rDist * 16.0 - uTime * 4.5) * 0.015 * smoothstep(2.35, 0.20, rDist);
+      float crossWave = cos(position.x * 8.5 + uTime * 2.2) * sin(position.y * 8.5 + uTime * 2.4) * 0.007;
+      transformed.z += rippleWave + crossWave;
+
+      // Perturb vertex normal for realistic specular light glints
+      vec3 waveNorm = vec3(
+        -cos(rDist * 16.0 - uTime * 4.5) * 0.18 * (position.x / max(0.001, rDist)),
+        -cos(rDist * 16.0 - uTime * 4.5) * 0.18 * (position.y / max(0.001, rDist)),
+        1.0
+      );
+      vNormal = normalize(normalMatrix * waveNorm);
+      `
+    );
+
+    shader.fragmentShader = `
+      uniform float uTime;
+      ${shader.fragmentShader}
+    `.replace(
+      '#include <dithering_fragment>',
+      `
+      #include <dithering_fragment>
+      // Subtle dynamic caustic shimmer and water glint overlay
+      vec2 cUv = gl_FragCoord.xy * 0.04;
+      float caustic = pow(sin(cUv.x * 4.5 + uTime * 2.0) * sin(cUv.y * 4.5 - uTime * 1.8) * 0.5 + 0.5, 3.0);
+      gl_FragColor.rgb += vec3(0.06, 0.20, 0.22) * caustic;
+      `
+    );
+  };
 
   const matWaterSubmerged = new THREE.MeshStandardMaterial({
     color: 0x166060,
@@ -156,10 +201,10 @@ export function buildFountainSystem(): FountainResult {
   nozzle.castShadow = true;
   group.add(nozzle);
 
-  // ── 3. Volumetric Water Surfaces ───────────────────────────────────────────
-  // Lower Water Pool Surface
+  // ── 3. Volumetric Water Surfaces (Tessellated for Shader Vertex Ripples) ────
+  // Lower Water Pool Surface with radial and theta tessellation rings
   const waterPoolRadius = fRadius - fThick;
-  const waterPoolGeo = new THREE.CircleGeometry(waterPoolRadius, 32);
+  const waterPoolGeo = new THREE.RingGeometry(0.04, waterPoolRadius, 48, 16);
   const waterPool = new THREE.Mesh(waterPoolGeo, matWater);
   waterPool.rotation.x = -Math.PI / 2;
   waterPool.position.set(0, 0.40, fZ);
@@ -167,7 +212,7 @@ export function buildFountainSystem(): FountainResult {
   group.add(waterPool);
 
   // Upper Bowl Water Surface
-  const upperWaterGeo = new THREE.CircleGeometry(0.80, 20);
+  const upperWaterGeo = new THREE.RingGeometry(0.04, 0.80, 24, 8);
   const upperWater = new THREE.Mesh(upperWaterGeo, matWater);
   upperWater.rotation.x = -Math.PI / 2;
   upperWater.position.set(0, 1.37, fZ);
@@ -293,6 +338,9 @@ export function buildFountainSystem(): FountainResult {
 
   // ── 8. Animation Update Loop ───────────────────────────────────────────────
   const update = (_delta: number, elapsed: number) => {
+    // Real-time GPU water ripple and caustics shader time propagation
+    waterUniforms.uTime.value = elapsed;
+
     // Jet spray breathing pulsation
     const pulse = Math.sin(elapsed * 4.5) * 0.08;
     jetGroup.scale.set(1.0 + pulse * 0.5, 1.0 + pulse, 1.0 + pulse * 0.5);

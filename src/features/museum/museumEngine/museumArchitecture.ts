@@ -36,6 +36,12 @@ import * as THREE from 'three';
 import { type CollisionBox } from './types';
 import { buildFountainSystem } from './water/fountainSystem';
 import { buildVegetationSystem } from './environment/vegetationSystem';
+import {
+  getTravertineBumpTexture,
+  getTerrazzoRoughnessTexture,
+  getWalnutWoodTexture,
+  getPaverBumpTexture,
+} from './materials/proceduralTextures';
 
 export interface ArchitectureResult {
   group: THREE.Group;
@@ -51,12 +57,17 @@ export function buildMuseumArchitecture(): ArchitectureResult {
   const animUpdaters: Array<(delta: number, elapsed: number) => void> = [];
 
   // ── 1. Physically Based Material Library ────────────────────────────────────
+  const travertineBump = getTravertineBumpTexture();
+  const terrazzoRoughness = getTerrazzoRoughnessTexture();
+  const walnutWood = getWalnutWoodTexture();
+  const paverBump = getPaverBumpTexture();
 
   // Foundation & stone steps
   const matFoundation = new THREE.MeshStandardMaterial({
     color: 0xa89f91,
     roughness: 0.88,
     metalness: 0.04,
+    ...(paverBump ? { bumpMap: paverBump, bumpScale: 0.015 } : {}),
   });
 
   // Exterior pavilion walls: warm travertine / off-white limestone
@@ -64,6 +75,7 @@ export function buildMuseumArchitecture(): ArchitectureResult {
     color: 0xf6f1e8,
     roughness: 0.82,
     metalness: 0.02,
+    ...(travertineBump ? { bumpMap: travertineBump, bumpScale: 0.018 } : {}),
   });
 
   // Architectural corner pilasters & entrance columns
@@ -71,6 +83,7 @@ export function buildMuseumArchitecture(): ArchitectureResult {
     color: 0xece5d8,
     roughness: 0.76,
     metalness: 0.03,
+    ...(travertineBump ? { bumpMap: travertineBump, bumpScale: 0.016 } : {}),
   });
 
   // Architectural moldings, portico, and wall-top cornice
@@ -78,6 +91,7 @@ export function buildMuseumArchitecture(): ArchitectureResult {
     color: 0xe2dbcd,
     roughness: 0.74,
     metalness: 0.04,
+    ...(travertineBump ? { bumpMap: travertineBump, bumpScale: 0.014 } : {}),
   });
 
   // Interior gallery plaster
@@ -92,6 +106,7 @@ export function buildMuseumArchitecture(): ArchitectureResult {
     color: 0x3d2b1a,
     roughness: 0.58,
     metalness: 0.08,
+    ...(walnutWood ? { bumpMap: walnutWood, bumpScale: 0.018 } : {}),
   });
 
   // Standing seam zinc roof: dark architectural charcoal slate
@@ -146,6 +161,7 @@ export function buildMuseumArchitecture(): ArchitectureResult {
     color: 0xf2ede3,
     roughness: 0.36,
     metalness: 0.06,
+    ...(terrazzoRoughness ? { roughnessMap: terrazzoRoughness } : {}),
   });
 
   // Plaza & promenade sandstone pavers
@@ -153,6 +169,7 @@ export function buildMuseumArchitecture(): ArchitectureResult {
     color: 0xb5aa9c,
     roughness: 0.82,
     metalness: 0.04,
+    ...(paverBump ? { bumpMap: paverBump, bumpScale: 0.022 } : {}),
   });
 
   // Pathway flagstone paving
@@ -160,6 +177,7 @@ export function buildMuseumArchitecture(): ArchitectureResult {
     color: 0xc4b9ab,
     roughness: 0.80,
     metalness: 0.03,
+    ...(paverBump ? { bumpMap: paverBump, bumpScale: 0.022 } : {}),
   });
 
   // Basalt dark border kerbs

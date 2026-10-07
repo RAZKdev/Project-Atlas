@@ -218,6 +218,14 @@ export function buildVegetationSystem(): VegetationResult {
       amplitude: 0.018,
       phase: phaseOffset + 0.8,
     });
+    swayTargets.push({
+      obj: centerCrown,
+      baseRotZ: 0,
+      baseRotX: 0,
+      freq: 1.4,
+      amplitude: 0.015,
+      phase: phaseOffset + 0.4,
+    });
 
     colliders.push({
       min: [x - 0.45, 0, z - 0.45],
@@ -299,8 +307,15 @@ export function buildVegetationSystem(): VegetationResult {
   const update = (_delta: number, elapsed: number) => {
     for (let i = 0; i < swayTargets.length; i++) {
       const t = swayTargets[i];
-      const swayZ = Math.sin(elapsed * t.freq + t.phase) * t.amplitude;
-      const swayX = Math.cos(elapsed * t.freq * 0.8 + t.phase) * (t.amplitude * 0.6);
+      // Multi-harmonic natural aerodynamic wind sway
+      const primaryZ = Math.sin(elapsed * t.freq + t.phase);
+      const gustZ = Math.sin(elapsed * t.freq * 2.2 + t.phase * 1.4) * 0.32;
+      const swayZ = (primaryZ + gustZ) * t.amplitude;
+
+      const primaryX = Math.cos(elapsed * t.freq * 0.78 + t.phase);
+      const gustX = Math.cos(elapsed * t.freq * 1.85 + t.phase * 0.9) * 0.28;
+      const swayX = (primaryX + gustX) * (t.amplitude * 0.65);
+
       t.obj.rotation.z = t.baseRotZ + swayZ;
       t.obj.rotation.x = t.baseRotX + swayX;
     }
