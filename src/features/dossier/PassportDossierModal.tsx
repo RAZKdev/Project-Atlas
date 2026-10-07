@@ -3,6 +3,7 @@ import { X, Printer, Compass, MapPin, Calendar, Archive, Camera, Globe, Award, S
 import { Country, Memory, Souvenir, AtlasStats } from '../../core/contracts';
 import { Button } from '../../components/ui/Button';
 import { ArchivalImage } from '../../components/ui/ArchivalImage';
+import { useModalFocusTrap } from '../../core/hooks/useModalFocusTrap';
 
 interface PassportDossierModalProps {
   isOpen: boolean;
@@ -21,7 +22,10 @@ export const PassportDossierModal: React.FC<PassportDossierModalProps> = ({
   souvenirs,
   stats,
 }) => {
+  const modalContainerRef = useRef<HTMLDivElement>(null);
   const dossierRef = useRef<HTMLDivElement>(null);
+
+  useModalFocusTrap(isOpen, onClose, modalContainerRef);
 
   if (!isOpen) return null;
 
@@ -34,7 +38,13 @@ export const PassportDossierModal: React.FC<PassportDossierModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+    <div
+      ref={modalContainerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="passport-dossier-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto"
+    >
       
       {/* Top Floating Action Bar (Hidden when printing) */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-3 print:hidden">
@@ -48,6 +58,7 @@ export const PassportDossierModal: React.FC<PassportDossierModalProps> = ({
         </Button>
         <button
           onClick={onClose}
+          aria-label="Tutup Dossier Paspor"
           className="p-2 rounded-full bg-museum-surface/90 border border-museum-border text-stone-300 hover:text-white transition-colors cursor-pointer"
         >
           <X className="w-5 h-5" />
@@ -77,7 +88,7 @@ export const PassportDossierModal: React.FC<PassportDossierModalProps> = ({
               <span className="font-mono text-xs tracking-[0.25em] text-[#70543D] uppercase block">
                 GLOBAL EXPEDITION ARCHIVE • OFFICIAL DOSSIER
               </span>
-              <h1 className="font-serif text-3xl sm:text-5xl font-bold tracking-tight text-[#141312]">
+              <h1 id="passport-dossier-title" className="font-serif text-3xl sm:text-5xl font-bold tracking-tight text-[#141312]">
                 PROJECT ATLAS PASSPORT
               </h1>
               <p className="font-serif italic text-base sm:text-lg text-[#543D2A]">

@@ -17,6 +17,7 @@
  */
 
 import { CANONICAL_COUNTRIES, CanonicalCountry } from './canonicalCountries';
+import { sanitizeSearchQuery } from '../../core/utils/securityUtils';
 
 export interface SearchMatch {
   country: CanonicalCountry;
@@ -233,7 +234,10 @@ class CountryRegistry {
   public search(query: string, limit: number = 10): SearchMatch[] {
     if (!query || !query.trim()) return [];
 
-    const rawTrimmed = query.trim();
+    const sanitized = sanitizeSearchQuery(query);
+    if (!sanitized) return [];
+
+    const rawTrimmed = sanitized.trim();
     const qNorm = normalizeSearchString(rawTrimmed);
     if (!qNorm) return [];
 
@@ -458,21 +462,23 @@ class CountryRegistry {
         const maxDist = qNorm.length <= 5 ? 1 : 2;
 
         // Check distance to country name
-        const distName = levenshteinDistance(qNorm, item.normDisplayName);
-        if (distName <= maxDist) {
-          candidateMatches.push({
-            country: c,
-            matchType: 'fuzzy',
-            matchedField: 'name',
-            matchedText: c.displayName,
-            score: 200 - distName * 30,
-            highlightDetail: `Mungkin maksud Anda: ${c.displayName}`,
-          });
-          continue;
+        if (Math.abs(qNorm.length - item.normDisplayName.length) <= maxDist) {
+          const distName = levenshteinDistance(qNorm, item.normDisplayName);
+          if (distName <= maxDist) {
+            candidateMatches.push({
+              country: c,
+              matchType: 'fuzzy',
+              matchedField: 'name',
+              matchedText: c.displayName,
+              score: 200 - distName * 30,
+              highlightDetail: `Mungkin maksud Anda: ${c.displayName}`,
+            });
+            continue;
+          }
         }
 
         // Check distance to capital city
-        if (item.normCapital) {
+        if (item.normCapital && Math.abs(qNorm.length - item.normCapital.length) <= maxDist) {
           const distCapital = levenshteinDistance(qNorm, item.normCapital);
           if (distCapital <= maxDist) {
             candidateMatches.push({

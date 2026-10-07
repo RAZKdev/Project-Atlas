@@ -21,6 +21,7 @@ export default {
           card: '#22201E',
           border: '#332E2A',
           hover: '#2D2926',
+          gold: '#D4AF37',
         },
         earth: {
           50: '#F9F6F0',

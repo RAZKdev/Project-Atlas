@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, MapPin, Calendar, Camera, Tag, Heart, Archive, HardDrive, Upload, Check } from 'lucide-react';
 import { Memory, Country, MediaReference, Souvenir } from '../../core/contracts';
 import { Button } from '../../components/ui/Button';
 import { mediaStore } from '../../core/services/mediaStore';
 import { ArchivalMedia } from '../../components/ui/ArchivalMedia';
+import { useModalFocusTrap } from '../../core/hooks/useModalFocusTrap';
+import { isValidMediaUrl, sanitizePlainText } from '../../core/utils/securityUtils';
 
 interface MemoryFormModalProps {
   isOpen: boolean;
@@ -22,6 +24,9 @@ export const MemoryFormModal: React.FC<MemoryFormModalProps> = ({
   countries,
   prefilledCountryCode,
 }) => {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(isOpen, onClose, modalRef);
+
   const [title, setTitle] = useState('');
   const [countryCode, setCountryCode] = useState('ID');
   const [placeName, setPlaceName] = useState('');
@@ -116,30 +121,40 @@ export const MemoryFormModal: React.FC<MemoryFormModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !placeName.trim() || !dateStart) {
+    const sanitizedTitle = sanitizePlainText(title, 200);
+    const sanitizedPlace = sanitizePlainText(placeName, 200);
+    const sanitizedSummary = sanitizePlainText(summary, 2000);
+    const sanitizedNotes = notes.trim() ? sanitizePlainText(notes, 5000) : undefined;
+
+    if (!sanitizedTitle || !sanitizedPlace || !dateStart) {
       alert('Harap isi kolom wajib: Judul, Nama Tempat, dan Tanggal.');
       return;
     }
 
     const tags = tagsInput
       .split(',')
-      .map(t => t.trim().toLowerCase())
+      .map(t => sanitizePlainText(t.trim().toLowerCase(), 50))
       .filter(t => t.length > 0);
 
     let coverImage: MediaReference | undefined = undefined;
     const mediaReferences: MediaReference[] = [];
 
     if (imageUrl.trim()) {
+      if (!isValidMediaUrl(imageUrl.trim())) {
+        alert('URL Media tidak valid atau mengandung skema protokol yang tidak diizinkan demi keamanan.');
+        return;
+      }
+
       coverImage = {
         id: `img-${Date.now()}`,
         type: mediaType,
         uri: imageUrl.trim(),
-        caption: imageCaption.trim() || title,
+        caption: sanitizePlainText(imageCaption, 300) || sanitizedTitle,
         date: dateStart,
         countryCode,
         isPersonal: isPersonalPhoto,
         attribution: isPersonalPhoto ? undefined : {
-          photographer: imagePhotographer.trim() || 'Kurasi Referensi',
+          photographer: sanitizePlainText(imagePhotographer, 200) || 'Kurasi Referensi',
           source: 'Web',
           license: 'Creative Commons / Domain Publik'
         }
@@ -152,8 +167,8 @@ export const MemoryFormModal: React.FC<MemoryFormModalProps> = ({
       souvenirs.push({
         id: `souv-${Date.now()}`,
         countryCode,
-        name: souvenirName.trim(),
-        description: souvenirDesc.trim(),
+        name: sanitizePlainText(souvenirName, 200),
+        description: sanitizePlainText(souvenirDesc, 1000),
         category: souvenirCategory,
         acquiredDate: dateStart
       });
@@ -161,13 +176,13 @@ export const MemoryFormModal: React.FC<MemoryFormModalProps> = ({
 
     onSave({
       id: initialMemory?.id,
-      title: title.trim(),
+      title: sanitizedTitle,
       countryCode,
-      placeName: placeName.trim(),
+      placeName: sanitizedPlace,
       dateStart,
       dateEnd: dateEnd ? dateEnd : undefined,
-      summary: summary.trim(),
-      notes: notes.trim() ? notes.trim() : undefined,
+      summary: sanitizedSummary,
+      notes: sanitizedNotes,
       tags,
       favorite,
       coverImage,
@@ -179,7 +194,13 @@ export const MemoryFormModal: React.FC<MemoryFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+    <div
+      ref={modalRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="memory-form-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto"
+    >
       <div className="relative w-full max-w-2xl bg-museum-surface rounded-2xl border border-museum-border shadow-2xl overflow-hidden my-8">
         
         {/* Header */}
@@ -188,12 +209,13 @@ export const MemoryFormModal: React.FC<MemoryFormModalProps> = ({
             <span className="text-[11px] font-mono text-earth-400 uppercase tracking-wider">
               {initialMemory ? 'Edit Catatan Arsip' : 'Catat Memori Baru'}
             </span>
-            <h2 className="font-serif text-xl text-parchment-100">
+            <h2 id="memory-form-modal-title" className="font-serif text-xl text-parchment-100">
               {initialMemory ? initialMemory.title : 'Arsipkan Momen Perjalanan'}
             </h2>
           </div>
           <button
             onClick={onClose}
+            aria-label="Tutup Formulir Memori"
             className="p-1 rounded-md text-stone-400 hover:text-parchment-100 hover:bg-white/5 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />

@@ -3,10 +3,11 @@
  * Interactive Curatorial Detail Modal for Museum Mini 3D ("195 Negara, 1 Cerita")
  */
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { type InteractableExhibit } from './museumEngine/types';
 import { storageService } from '../../core/services/storageService';
 import { type Country, type Memory, type Souvenir, type AtlasStats } from '../../core/contracts';
+import { useModalFocusTrap } from '../../core/hooks/useModalFocusTrap';
 
 interface ExhibitModalProps {
   exhibit: InteractableExhibit | null;
@@ -19,6 +20,9 @@ export const ExhibitModal: React.FC<ExhibitModalProps> = ({
   onClose,
   onSelectCountry,
 }) => {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(!!exhibit, onClose, modalRef);
+
   // Safe read-only storage queries
   const stats = useMemo<AtlasStats>(() => {
     try {
@@ -338,6 +342,7 @@ export const ExhibitModal: React.FC<ExhibitModalProps> = ({
 
   return (
     <div
+      ref={modalRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="exhibit-modal-title"

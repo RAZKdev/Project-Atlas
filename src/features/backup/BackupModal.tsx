@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Download, Upload, Shield, Lock, FileJson, AlertCircle, CheckCircle2, Database } from 'lucide-react';
 import { storageService } from '../../core/services/storageService';
 import { mediaStore } from '../../core/services/mediaStore';
 import { CryptoService, EncryptedPayload } from '../../core/services/cryptoService';
 import { Button } from '../../components/ui/Button';
+import { useModalFocusTrap } from '../../core/hooks/useModalFocusTrap';
 
 interface BackupModalProps {
   isOpen: boolean;
@@ -16,6 +17,9 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(isOpen, onClose, modalRef);
+
   const [activeTab, setActiveTab] = useState<'export' | 'import'>('export');
   
   // Storage Quota
@@ -159,16 +163,28 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+    <div
+      ref={modalRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="backup-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+    >
       <div className="w-full max-w-lg bg-museum-surface rounded-2xl border border-museum-border shadow-2xl overflow-hidden">
         
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-museum-border bg-museum-card">
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-earth-400" />
-            <span className="font-serif text-lg text-parchment-100">Manajemen Cadangan & Ekspor</span>
+            <h2 id="backup-modal-title" className="font-serif text-lg text-parchment-100 font-semibold">
+              Manajemen Cadangan & Ekspor
+            </h2>
           </div>
-          <button onClick={onClose} className="p-1 rounded text-stone-400 hover:text-white cursor-pointer">
+          <button
+            onClick={onClose}
+            aria-label="Tutup Dialog Cadangan"
+            className="p-1 rounded text-stone-400 hover:text-white cursor-pointer"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
