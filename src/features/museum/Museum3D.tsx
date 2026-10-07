@@ -107,6 +107,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({
   activeModalExhibitRef.current = activeModalExhibit;
   const viewModeRef = useRef<MuseumViewMode>('walkthrough');
   viewModeRef.current = viewMode;
+  const lastFocusedExhibitIdRef = useRef<string | null>(null);
 
   // Mobile virtual joystick refs
   const joystickTouchIdRef = useRef<number | null>(null);
@@ -545,7 +546,11 @@ export const Museum3D: React.FC<Museum3DProps> = ({
             camera
           );
         }
-        setFocusedExhibit(player.focusedExhibit);
+        const nextFocusId = player.focusedExhibit ? player.focusedExhibit.id : null;
+        if (nextFocusId !== lastFocusedExhibitIdRef.current) {
+          lastFocusedExhibitIdRef.current = nextFocusId;
+          setFocusedExhibit(player.focusedExhibit);
+        }
       } else {
         // Diorama Orbit Camera
         const o = orbitRef.current;
@@ -559,7 +564,10 @@ export const Museum3D: React.FC<Museum3DProps> = ({
 
         camera.position.set(cx, cy, cz);
         camera.lookAt(o.pivot);
-        setFocusedExhibit(null);
+        if (lastFocusedExhibitIdRef.current !== null) {
+          lastFocusedExhibitIdRef.current = null;
+          setFocusedExhibit(null);
+        }
       }
 
       renderer.render(scene, camera);
