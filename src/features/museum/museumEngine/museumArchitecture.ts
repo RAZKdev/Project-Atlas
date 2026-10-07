@@ -389,6 +389,20 @@ export function buildMuseumArchitecture(): ArchitectureResult {
   step3.receiveShadow = true;
   group.add(step3);
 
+  // Architectural Step Nosing Trims for realistic shadow relief
+  const nosingGeo = new THREE.BoxGeometry(2.44, 0.035, 0.04);
+  const nosing1 = new THREE.Mesh(nosingGeo, matStoneColumn);
+  nosing1.position.set(0, 0.17 - 0.0175, 4.93);
+  group.add(nosing1);
+
+  const nosing2 = new THREE.Mesh(nosingGeo, matStoneColumn);
+  nosing2.position.set(0, 0.34 - 0.0175, 4.63);
+  group.add(nosing2);
+
+  const nosing3 = new THREE.Mesh(nosingGeo, matStoneColumn);
+  nosing3.position.set(0, 0.50 - 0.0175, 4.33);
+  group.add(nosing3);
+
   // Stepped Stone Cheek Walls / Balustrades flanking the steps
   const cheekGeo = new THREE.BoxGeometry(0.28, 0.85, 1.10);
 
@@ -536,6 +550,18 @@ export function buildMuseumArchitecture(): ArchitectureResult {
     name: 'south_right_wall',
   });
 
+  // South facade decorative recessed molding panels for architectural depth
+  const southPanelGeo = new THREE.BoxGeometry(1.60, 2.20, 0.03);
+  const southPanelL = new THREE.Mesh(southPanelGeo, matCornice);
+  southPanelL.position.set(-(doorW / 2 + southSideW / 2), wallY, 4.11);
+  southPanelL.castShadow = true;
+  group.add(southPanelL);
+
+  const southPanelR = new THREE.Mesh(southPanelGeo, matCornice);
+  southPanelR.position.set(doorW / 2 + southSideW / 2, wallY, 4.11);
+  southPanelR.castShadow = true;
+  group.add(southPanelR);
+
   // Top Lintel Wall above door
   const lintelH = wallH - doorH; // 1.10m
   const southLintel = new THREE.Mesh(new THREE.BoxGeometry(doorW, lintelH, wallThick), matExtWall);
@@ -560,6 +586,14 @@ export function buildMuseumArchitecture(): ArchitectureResult {
   canopy.position.set(0, 0.50 + doorH + 0.75, 4.45);
   canopy.castShadow = true;
   group.add(canopy);
+
+  // Portico dentil frieze along the canopy front edge
+  const dentilGeo = new THREE.BoxGeometry(0.08, 0.05, 0.04);
+  for (let dx = -1.25; dx <= 1.25; dx += 0.22) {
+    const dentil = new THREE.Mesh(dentilGeo, matCornice);
+    dentil.position.set(dx, 0.50 + doorH + 0.65, 4.98);
+    group.add(dentil);
+  }
 
   // Slender Round Columns supporting the canopy
   const colGeo = new THREE.CylinderGeometry(0.09, 0.11, 3.10, 16);
