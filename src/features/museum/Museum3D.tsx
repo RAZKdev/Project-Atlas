@@ -580,10 +580,36 @@ export const Museum3D: React.FC<Museum3DProps> = ({
       cancelAnimationFrame(animFrameIdRef.current);
       window.removeEventListener('resize', handleResize);
       canvas.removeEventListener('webglcontextlost', handleContextLost);
+
+      // Deep recursive GPU resource disposal (F-01)
+      scene.traverse((obj) => {
+        if ((obj as THREE.Mesh).isMesh) {
+          const mesh = obj as THREE.Mesh;
+          if (mesh.geometry) {
+            mesh.geometry.dispose();
+          }
+          if (mesh.material) {
+            const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            mats.forEach((mat) => {
+              // Dispose standard texture map channels if present
+              const m = mat as any;
+              if (m.map && typeof m.map.dispose === 'function') m.map.dispose();
+              if (m.lightMap && typeof m.lightMap.dispose === 'function') m.lightMap.dispose();
+              if (m.bumpMap && typeof m.bumpMap.dispose === 'function') m.bumpMap.dispose();
+              if (m.normalMap && typeof m.normalMap.dispose === 'function') m.normalMap.dispose();
+              if (m.roughnessMap && typeof m.roughnessMap.dispose === 'function') m.roughnessMap.dispose();
+              if (m.metalnessMap && typeof m.metalnessMap.dispose === 'function') m.metalnessMap.dispose();
+              if (m.envMap && typeof m.envMap.dispose === 'function') m.envMap.dispose();
+              mat.dispose();
+            });
+          }
+        }
+      });
+
       renderer.dispose();
       scene.clear();
     };
-  }, [quality, headBobEnabled]);
+  }, [quality]);
 
   // Sync head bob setting
   useEffect(() => {

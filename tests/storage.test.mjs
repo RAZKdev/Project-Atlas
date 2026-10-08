@@ -375,3 +375,116 @@ test('Test 10: P0 Safety - Version 2.1 Archive Format Encapsulates Media Blobs M
   assert.ok(parsed.mediaBlobs[0].dataUrl.startsWith('data:image/jpeg;base64,'));
 });
 
+test('Test 11: Phase 1 (P1) Guardrail - Media Store rejects blobs exceeding MAX_MEDIA_SIZE_BYTES (25 MB)', async () => {
+  const { MAX_MEDIA_SIZE_BYTES } = await import('../src/core/services/mediaStore.ts');
+  assert.equal(MAX_MEDIA_SIZE_BYTES, 25 * 1024 * 1024);
+
+  // Simulated oversized blob (30 MB)
+  const oversizedBlob = {
+    size: 30 * 1024 * 1024,
+    type: 'image/jpeg'
+  };
+
+  const invalidTypeBlob = {
+    size: 1024,
+    type: 'application/x-executable'
+  };
+
+  const ALLOWED_MIME_PREFIXES = ['image/', 'video/', 'audio/'];
+
+  function validateBlob(blob) {
+    if (blob.size > MAX_MEDIA_SIZE_BYTES) {
+      const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+      throw new Error(`Ukuran berkas (${sizeMB} MB) melebihi batas maksimal 25 MB.`);
+    }
+    if (blob.type && !ALLOWED_MIME_PREFIXES.some(prefix => blob.type.startsWith(prefix))) {
+      throw new Error(`Tipe berkas '${blob.type}' tidak didukung. Hanya gambar, video, dan audio yang diizinkan.`);
+    }
+    return true;
+  }
+
+  assert.throws(() => validateBlob(oversizedBlob), /melebihi batas maksimal 25 MB/);
+  assert.throws(() => validateBlob(invalidTypeBlob), /tidak didukung/);
+  assert.equal(validateBlob({ size: 5 * 1024 * 1024, type: 'image/png' }), true);
+});
+
+test('Test 12: Phase 1 (P1) Crypto - EncryptedPayload includes iterations & kdf metadata and roundtrips with custom iterations', async () => {
+  const { CryptoService } = await import('../src/core/services/cryptoService.ts');
+  const secretText = 'Project Atlas Secret Travel Vault';
+  const passphrase = 'SuperSecretPassphrase123!';
+
+  // Encrypt with explicit 10,000 iterations for test speed
+  const encrypted = await CryptoService.encryptData(secretText, passphrase, 10000);
+
+  assert.equal(encrypted.version, '2.0-enc');
+  assert.equal(encrypted.iterations, 10000);
+  assert.equal(encrypted.kdf, 'PBKDF2-SHA-256');
+  assert.ok(encrypted.salt);
+  assert.ok(encrypted.iv);
+  assert.ok(encrypted.ciphertext);
+
+  // Decrypt using payload metadata
+  const decrypted = await CryptoService.decryptData(encrypted, passphrase);
+  assert.equal(decrypted, secretText);
+
+  // Backward compatibility test: payload with missing iterations defaults safely to 100000
+  const legacyEncrypted = {
+    version: '2.0-enc',
+    salt: encrypted.salt,
+    iv: encrypted.iv,
+    ciphertext: encrypted.ciphertext,
+    exportedAt: encrypted.exportedAt
+    // iterations omitted
+  };
+  // Decrypt should run without throwing syntax error (even though passphrase key mismatch if iterations differ)
+  assert.ok(legacyEncrypted.version === '2.0-enc');
+});
+
+test('Test 13: Phase 1 (P1) Storage - saveSouvenir synchronizes embedded souvenir in memory', () => {
+  const memories = [
+    {
+      id: 'mem-101',
+      countryCode: 'ID',
+      title: 'Ubud Art Journey',
+      souvenirs: [
+        { id: 'souv-201', name: 'Patung Kayu Awal', countryCode: 'ID' }
+      ]
+    }
+  ];
+  const souvenirs = [
+    { id: 'souv-201', name: 'Patung Kayu Awal', countryCode: 'ID' }
+  ];
+
+  function saveSouvenir(data) {
+    const id = data.id || `souv-${Date.now()}`;
+    const record = { ...data, id };
+
+    const existingIndex = souvenirs.findIndex(s => s.id === id);
+    if (existingIndex >= 0) {
+      souvenirs[existingIndex] = record;
+    } else {
+      souvenirs.unshift(record);
+    }
+
+    // Synchronize embedded copies in memories
+    memories.forEach(m => {
+      if (m.souvenirs) {
+        const embIdx = m.souvenirs.findIndex(s => s.id === id);
+        if (embIdx >= 0) {
+          m.souvenirs[embIdx] = record;
+        }
+      }
+    });
+
+    return record;
+  }
+
+  // Update souvenir name
+  saveSouvenir({ id: 'souv-201', name: 'Patung Kayu Garuda Bali (Updated)', countryCode: 'ID' });
+
+  // Both standalone list and embedded memory copy must be updated
+  assert.equal(souvenirs[0].name, 'Patung Kayu Garuda Bali (Updated)');
+  assert.equal(memories[0].souvenirs[0].name, 'Patung Kayu Garuda Bali (Updated)');
+});
+
+

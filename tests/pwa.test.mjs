@@ -105,3 +105,29 @@ test('PWA Test 4: pwaService Lifecycle & Invariant State', async () => {
   unsubscribe();
 });
 
+test('PWA Test 5: Phase 1 (P1) Service Worker Font CDN Caching Strategy', () => {
+  const swPath = path.join(ROOT_DIR, 'public', 'sw.js');
+  const swContent = fs.readFileSync(swPath, 'utf8');
+
+  // Verify v1.2 versioning
+  assert.ok(swContent.includes('project-atlas-shell-v1.2'), 'sw.js should declare v1.2 shell cache');
+  assert.ok(swContent.includes('project-atlas-runtime-v1.2'), 'sw.js should declare v1.2 runtime cache');
+
+  // Verify Google Fonts caching in static assets rule
+  assert.ok(swContent.includes('fonts.googleapis.com'), 'sw.js must intercept fonts.googleapis.com');
+  assert.ok(swContent.includes('fonts.gstatic.com'), 'sw.js must intercept fonts.gstatic.com');
+});
+
+test('PWA Test 6: Phase 1 (P1) Offline Font Fallbacks in CSS', () => {
+  const cssPath = path.join(ROOT_DIR, 'src', 'styles', 'index.css');
+  const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+  // Verify comprehensive system font fallbacks
+  assert.ok(cssContent.includes('-apple-system'), 'body font stack must include -apple-system');
+  assert.ok(cssContent.includes('BlinkMacSystemFont'), 'body font stack must include BlinkMacSystemFont');
+  assert.ok(cssContent.includes('Georgia'), 'serif font stack must include Georgia');
+  assert.ok(cssContent.includes('Cambria'), 'serif font stack must include Cambria');
+  assert.ok(cssContent.includes('ui-monospace'), 'mono font stack must include ui-monospace');
+});
+
+

@@ -7,6 +7,9 @@ const DB_NAME = 'ProjectAtlasMediaDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'media_blobs';
 
+export const MAX_MEDIA_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB per binary media
+const ALLOWED_MIME_PREFIXES = ['image/', 'video/', 'audio/'];
+
 class MediaStore {
   private dbPromise: Promise<IDBDatabase> | null = null;
   private urlCache: Map<string, string> = new Map();
@@ -35,6 +38,17 @@ class MediaStore {
    * Save a local file/blob to IndexedDB and return its media key.
    */
   public async saveMediaBlob(id: string, blob: Blob | File, filename?: string): Promise<string> {
+    // Media guardrail: size ceiling (F-04)
+    if (blob.size > MAX_MEDIA_SIZE_BYTES) {
+      const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+      throw new Error(`Ukuran berkas (${sizeMB} MB) melebihi batas maksimal 25 MB.`);
+    }
+
+    // Media guardrail: allowed types
+    if (blob.type && !ALLOWED_MIME_PREFIXES.some(prefix => blob.type.startsWith(prefix))) {
+      throw new Error(`Tipe berkas '${blob.type}' tidak didukung. Hanya gambar, video, dan audio yang diizinkan.`);
+    }
+
     const db = await this.getDB();
     const mediaKey = `local-media:${id}`;
 

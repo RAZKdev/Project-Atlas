@@ -9,11 +9,13 @@ export interface EncryptedPayload {
   salt: string;   // Base64
   iv: string;     // Base64
   ciphertext: string; // Base64
+  iterations?: number; // PBKDF2 iterations (default 100000)
+  kdf?: string;        // 'PBKDF2-SHA-256'
   exportedAt: string;
 }
 
 export class CryptoService {
-  private static async deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+  private static async deriveKey(password: string, salt: Uint8Array, iterations = 100000): Promise<CryptoKey> {
     const enc = new TextEncoder();
     const keyMaterial = await crypto.subtle.importKey(
       'raw',
@@ -27,7 +29,7 @@ export class CryptoService {
       {
         name: 'PBKDF2',
         salt: salt as any,
-        iterations: 100000,
+        iterations: iterations,
         hash: 'SHA-256',
       },
       keyMaterial,
@@ -37,10 +39,10 @@ export class CryptoService {
     );
   }
 
-  public static async encryptData(plainText: string, password: string): Promise<EncryptedPayload> {
+  public static async encryptData(plainText: string, password: string, iterations = 100000): Promise<EncryptedPayload> {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const key = await this.deriveKey(password, salt);
+    const key = await this.deriveKey(password, salt, iterations);
 
     const enc = new TextEncoder();
     const encodedData = enc.encode(plainText);
@@ -56,6 +58,8 @@ export class CryptoService {
       salt: this.bufferToBase64(salt),
       iv: this.bufferToBase64(iv),
       ciphertext: this.bufferToBase64(new Uint8Array(encryptedBuffer)),
+      iterations,
+      kdf: 'PBKDF2-SHA-256',
       exportedAt: new Date().toISOString()
     };
   }
@@ -64,8 +68,9 @@ export class CryptoService {
     const salt = this.base64ToBuffer(payload.salt);
     const iv = this.base64ToBuffer(payload.iv);
     const ciphertext = this.base64ToBuffer(payload.ciphertext);
+    const iterations = payload.iterations && payload.iterations > 0 ? payload.iterations : 100000;
 
-    const key = await this.deriveKey(password, salt);
+    const key = await this.deriveKey(password, salt, iterations);
 
     try {
       const decryptedBuffer = await crypto.subtle.decrypt(

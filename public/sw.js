@@ -1,10 +1,10 @@
 /**
  * Service Worker: Project Atlas PWA Offline Shell
- * Version: project-atlas-v1.1
+ * Version: project-atlas-v1.2
  */
 
-const CACHE_NAME = 'project-atlas-shell-v1';
-const RUNTIME_CACHE = 'project-atlas-runtime-v1';
+const CACHE_NAME = 'project-atlas-shell-v1.2';
+const RUNTIME_CACHE = 'project-atlas-runtime-v1.2';
 
 // Critical application shell assets to pre-cache on install
 const PRECACHE_ASSETS = [
@@ -78,7 +78,9 @@ self.addEventListener('fetch', (event) => {
     request.destination === 'style' ||
     request.destination === 'image' ||
     request.destination === 'font' ||
-    request.url.includes('/assets/');
+    request.url.includes('/assets/') ||
+    request.url.includes('fonts.googleapis.com') ||
+    request.url.includes('fonts.gstatic.com');
 
   if (isStaticAsset) {
     event.respondWith(

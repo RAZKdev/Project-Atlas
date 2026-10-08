@@ -23,6 +23,13 @@ class StorageService {
 
   private init() {
     try {
+      if (typeof localStorage === 'undefined') {
+        this.countries = this.buildInitialCountries();
+        this.memories = [...SEED_MEMORIES];
+        this.souvenirs = [];
+        return;
+      }
+
       const isInitialized = localStorage.getItem(STORAGE_KEYS.INITIALIZED);
       
       if (!isInitialized) {
@@ -89,6 +96,10 @@ class StorageService {
 
   private save() {
     try {
+      if (typeof localStorage === 'undefined') {
+        this.notify();
+        return;
+      }
       localStorage.setItem(STORAGE_KEYS.COUNTRIES, JSON.stringify(this.countries));
       localStorage.setItem(STORAGE_KEYS.MEMORIES, JSON.stringify(this.memories));
       localStorage.setItem(STORAGE_KEYS.SOUVENIRS, JSON.stringify(this.souvenirs));
@@ -234,6 +245,16 @@ class StorageService {
     } else {
       this.souvenirs.unshift(souvenir);
     }
+
+    // Synchronize embedded copies in memories to prevent stale data (F-03)
+    this.memories.forEach(m => {
+      if (m.souvenirs) {
+        const embIdx = m.souvenirs.findIndex(s => s.id === id);
+        if (embIdx >= 0) {
+          m.souvenirs[embIdx] = souvenir;
+        }
+      }
+    });
 
     // Auto mark country visited if unknown
     const country = this.getCountryByCode(souvenir.countryCode);
