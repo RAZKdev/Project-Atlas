@@ -23,6 +23,7 @@ import { storageService } from '../../core/services/storageService';
 import { type Memory } from '../../core/contracts';
 import { type MuseumPageView, type SimulationState, type InteractableExhibit } from './museumEngine/types';
 import { ExhibitModal } from './ExhibitModal';
+import { useModalFocusTrap } from '../../core/hooks/useModalFocusTrap';
 
 interface MuseumPageProps {
   onSelectCountry?: (countryCode: string) => void;
@@ -35,6 +36,8 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
 
   // Modal & Detail states
   const [selectedZone, setSelectedZone] = useState<MuseumZone | null>(null);
+  const zoneModalRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(!!selectedZone, () => setSelectedZone(null), zoneModalRef);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [selectedExhibit, setSelectedExhibit] = useState<InteractableExhibit | null>(null);
   const [memorySearch, setMemorySearch] = useState('');
@@ -660,8 +663,10 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
       {/* ── 2D Zone Curatorial Modal (Requirement 2 & 3 - Never starts 3D directly) ── */}
       {selectedZone && (
         <div
+          ref={zoneModalRef}
           role="dialog"
           aria-modal="true"
+          aria-labelledby="zone-modal-title"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn"
           onClick={() => setSelectedZone(null)}
         >
@@ -675,7 +680,7 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
                   {selectedZone.icon}
                 </span>
                 <div>
-                  <h3 className="font-serif text-xl font-bold text-parchment-100">{selectedZone.name}</h3>
+                  <h3 id="zone-modal-title" className="font-serif text-xl font-bold text-parchment-100">{selectedZone.name}</h3>
                   <span className="text-[10px] font-mono text-museum-gold uppercase tracking-wider">
                     Zona Kurasi Museum Mini · 6×8m
                   </span>

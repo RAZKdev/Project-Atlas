@@ -249,3 +249,43 @@ test('A11y Audit: Curatorial Cards Meet or Exceed WCAG AA Contrast Ratios (>= 4.
   assert.ok(ratioGoldOnSurface >= 4.5, `Museum Gold on Surface: ${ratioGoldOnSurface.toFixed(2)}`);
 });
 
+test('A11y Audit: Page-Level Modals in MuseumPage & Museum3D Implement Focus Trap & ARIA Roles', () => {
+  const projectRoot = path.resolve(process.cwd());
+  const pageFiles = [
+    'src/features/museum/MuseumPage.tsx',
+    'src/features/museum/Museum3D.tsx'
+  ];
+
+  for (const relativePath of pageFiles) {
+    const fullPath = path.join(projectRoot, relativePath);
+    assert.ok(fs.existsSync(fullPath), `File must exist: ${relativePath}`);
+    const content = fs.readFileSync(fullPath, 'utf-8');
+
+    // Both must use useModalFocusTrap
+    assert.ok(content.includes('useModalFocusTrap'), `${relativePath} must use useModalFocusTrap`);
+    // Both must declare role="dialog"
+    assert.ok(content.includes('role="dialog"'), `${relativePath} must declare role="dialog"`);
+    // Both must declare aria-modal="true"
+    assert.ok(content.includes('aria-modal="true"'), `${relativePath} must declare aria-modal="true"`);
+    // Both must declare aria-labelledby
+    assert.ok(content.includes('aria-labelledby='), `${relativePath} must declare aria-labelledby`);
+  }
+});
+
+test('A11y Audit: Curatorial UI Elements & Badges Meet WCAG AA Standards', () => {
+  const museumSurface = '#1A1817';
+  const museumCard = '#22201E';
+  const earth200 = '#DFCDB8';
+  const earth300 = '#C9AE92';
+  const parchment500 = '#C7B7A3';
+
+  const ratioEarth200 = getContrastRatio(earth200, museumSurface);
+  const ratioEarth300 = getContrastRatio(earth300, museumSurface);
+  const ratioParchment500 = getContrastRatio(parchment500, museumCard);
+
+  assert.ok(ratioEarth200 >= 4.5, `Earth-200 contrast must be >= 4.5, got ${ratioEarth200.toFixed(2)}`);
+  assert.ok(ratioEarth300 >= 4.5, `Earth-300 contrast must be >= 4.5, got ${ratioEarth300.toFixed(2)}`);
+  assert.ok(ratioParchment500 >= 4.5, `Parchment-500 contrast must be >= 4.5, got ${ratioParchment500.toFixed(2)}`);
+});
+
+

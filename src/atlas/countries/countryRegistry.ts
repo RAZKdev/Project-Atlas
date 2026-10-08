@@ -133,6 +133,11 @@ export const COUNTRY_ALIASES: Record<string, string[]> = {
   'UA': ['Ukraine'],
   'IN': ['India', 'Bharat'],
   'ID': ['Indonesia', 'Nusantara'],
+  'AU': ['Australia', 'Aussie'],
+  'ET': ['Ethiopia', 'Abyssinia'],
+  'MN': ['Mongolia'],
+  'DO': ['Dominican Republic'],
+  'TT': ['Trinidad and Tobago'],
 };
 
 interface IndexedCountry {

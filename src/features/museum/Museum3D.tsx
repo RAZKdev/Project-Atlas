@@ -35,6 +35,7 @@ import {
   type POVMode,
 } from './museumEngine/types';
 import { ExhibitModal } from './ExhibitModal';
+import { useModalFocusTrap } from '../../core/hooks/useModalFocusTrap';
 
 export interface Museum3DProps {
   onSelectCountry?: (countryCode: string) => void;
@@ -92,6 +93,8 @@ export const Museum3D: React.FC<Museum3DProps> = ({
   const [currentPOV, setCurrentPOV] = useState<POVMode>('first_person');
   const [isPointerLocked, setIsPointerLocked] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const pauseModalRef = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(isPaused, () => setIsPaused(false), pauseModalRef);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [focusedExhibit, setFocusedExhibit] = useState<InteractableExhibit | null>(null);
   const [activeModalExhibit, setActiveModalExhibit] = useState<InteractableExhibit | null>(null);
@@ -902,15 +905,17 @@ export const Museum3D: React.FC<Museum3DProps> = ({
       {/* ── In-Simulation Pause Modal ──────────────────────────────────────── */}
       {isPaused && (
         <div
+          ref={pauseModalRef}
           role="dialog"
           aria-modal="true"
+          aria-labelledby="pause-modal-title"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn"
         >
           <div className="w-full max-w-md rounded-2xl border border-museum-gold/50 bg-museum-surface p-6 text-parchment-100 shadow-2xl space-y-5">
             <div className="flex items-center justify-between border-b border-parchment-800 pb-3">
               <div className="flex items-center gap-2">
                 <span className="text-xl">⏸️</span>
-                <h3 className="font-serif text-lg font-bold text-parchment-100">
+                <h3 id="pause-modal-title" className="font-serif text-lg font-bold text-parchment-100">
                   Simulasi Museum Dijeda
                 </h3>
               </div>

@@ -220,3 +220,69 @@ test('Search Test 13: Deterministic Relevance Hierarchy (Exact > Partial > Fuzzy
   assert.equal(resJak[0].country.id, 'ID');
   assert.ok(resJak[0].score >= 900);
 });
+
+test('Search Test 14: Phase 2 (P2) - Multi-Word Capitals & Complex Geographic Aliases Benchmark', () => {
+  const multiWordQueries = [
+    { query: 'Bandar Seri Begawan', expectedId: 'BN' },
+    { query: 'San Jose', expectedId: 'CR' },
+    { query: 'San José', expectedId: 'CR' },
+    { query: 'Kuala Lumpur', expectedId: 'MY' },
+    { query: 'Addis Ababa', expectedId: 'ET' },
+    { query: 'Buenos Aires', expectedId: 'AR' },
+    { query: 'New Delhi', expectedId: 'IN' },
+    { query: 'Washington D C', expectedId: 'US' },
+    { query: 'Port Moresby', expectedId: 'PG' },
+    { query: 'Abu Dhabi', expectedId: 'AE' }
+  ];
+
+  for (const item of multiWordQueries) {
+    const results = countryRegistry.search(item.query, 3);
+    assert.ok(results.length > 0, `Query "${item.query}" must yield results`);
+    assert.equal(results[0].country.id, item.expectedId, `Query "${item.query}" top match should be ${item.expectedId}, got ${results[0].country.id}`);
+  }
+});
+
+test('Search Test 15: Phase 2 (P2) - Expanded Fuzzy Typo & Transposition Ranking', () => {
+  const typoCases = [
+    { query: 'Indonesai', expectedId: 'ID' },
+    { query: 'Swithzerland', expectedId: 'CH' },
+    { query: 'Koreaa', expectedId: 'KR' },
+    { query: 'Germnay', expectedId: 'DE' },
+    { query: 'Austrlia', expectedId: 'AU' },
+    { query: 'Singapre', expectedId: 'SG' },
+    { query: 'Tokiyo', expectedId: 'JP' }
+  ];
+
+  for (const tc of typoCases) {
+    const results = countryRegistry.search(tc.query, 3);
+    assert.ok(results.length > 0, `Typo "${tc.query}" should return matches`);
+    const found = results.some(r => r.country.id === tc.expectedId);
+    assert.ok(found, `Typo "${tc.query}" should contain ${tc.expectedId} in top results`);
+  }
+});
+
+test('Search Test 16: Phase 2 (P2) - High-Throughput Search Benchmark (100 Iterations)', () => {
+  const queries = [
+    'Indonesia', 'Japan', 'Bandar Seri Begawan', 'Buenos Aires',
+    'ID', 'USA', 'CHE', 'Paris', 'New Delhi', 'Indoneisa',
+    'South Korea', 'Germany', 'Australia', 'Cairo', 'Rome'
+  ];
+
+  const totalRuns = 100;
+  const start = performance.now();
+
+  for (let i = 0; i < totalRuns; i++) {
+    for (const q of queries) {
+      const res = countryRegistry.search(q, 5);
+      assert.ok(res.length > 0);
+    }
+  }
+
+  const durationMs = performance.now() - start;
+  const totalSearches = totalRuns * queries.length;
+  const avgLatencyMs = durationMs / totalSearches;
+
+  // Average search latency must remain sub-5ms across 1,500 full multi-field searches
+  assert.ok(avgLatencyMs < 5.0, `Average search latency must be under 5.0ms, got ${avgLatencyMs.toFixed(3)}ms`);
+});
+
