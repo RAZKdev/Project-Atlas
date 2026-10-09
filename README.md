@@ -56,9 +56,7 @@
    - Dokumen arsip resmi bergaya paspor diplomatik penjelajah dan jurnal buku ekspedisi museum.
    - Halaman identitas paspor penjelajah, cap visa stempel vintage grafis untuk setiap negara yang dikunjungi, catatan kronologis perjalanan, dan inventaris artefak.
    - Dilengkapi aturan `@media print` teroptimasi untuk cetak langsung ke kertas A4 atau disimpan menjadi file PDF berkualitas tinggi via dialog print browser.
-
-
-6. **Archive Diagnostics:**
+4. **Archive Diagnostics:**
    - Fitur reset ke sampel kurasi (*Curated Seed*) atau pengosongan total (*Empty Archive*) untuk menguji *empty states*.
 
 ---
