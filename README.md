@@ -2,8 +2,6 @@
 
 > **A quiet personal digital atlas and future museum of memories built around authentic photography and travel records.**
 
-Project Atlas documents places, journeys, memories, photo references, and physical souvenirs. It is built strictly according to [`SKILL.md`](./SKILL.md), [`DESIGN.md`](./DESIGN.md), and [`MASTER_PROMPT.md`](./MASTER_PROMPT.md).
-
 ---
 
 ## 🏛️ Karakter & Filosofi Produk
@@ -12,29 +10,6 @@ Project Atlas documents places, journeys, memories, photo references, and physic
 - **Museum-like Curation:** Menggabungkan eksplorasi kartografi dunia, arsip catatan jurnal perjalanan, dan artefak fisik (suvenir, tiket, kain tenun).
 - **Authentic Photography:** Menghindari stok turis komersial, ilustrasi kartun, dan saturasi berlebihan. Mengutamakan foto lanskap dan arsitektur otentik dengan atribusi sumber yang jelas.
 - **100% Local-First & Private:** Semua data memori, catatan, dan referensi media tersimpan aman di browser lokal Anda tanpa pelacakan atau server pihak ketiga.
-
----
-
-## 🚀 Cara Menjalankan Aplikasi
-
-Pastikan Node.js (v18+) telah terpasang di komputer Anda.
-
-### 1. Menjalankan Mode Development
-```bash
-npm run dev
-```
-Akses di peramban: `http://localhost:5173`
-
-### 2. Menjalankan Build Produksi & Preview
-```bash
-npm run build
-npm run preview
-```
-
-### 3. Menjalankan Automated Tests
-```bash
-node --test tests/storage.test.mjs
-```
 
 ---
 
