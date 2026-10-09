@@ -27,7 +27,8 @@ Thumbs.db
 # Internal Documentation & Prompts (Exclude all .md except README.md)
 *.md
 !README.md
-!docs/**/*.md
+!readme.md
+docs/
 
 # Temporary QA screenshots
 qa_shot_*.png
