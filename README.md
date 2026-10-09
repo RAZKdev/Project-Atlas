@@ -86,10 +86,7 @@ PROJECT ATLAS/
 │   ├── App.tsx               # Orchestration & view routing
 │   └── main.tsx              # React mounting
 ├── tests/                    # Automated unit tests
-├── public/                   # Favicon & aset publik
-├── DESIGN.md                 # UI/UX Source of Truth
-├── MASTER_PROMPT.md          # Implementation Directives
-└── SKILL.md                  # Engineering Source of Truth
+└── public/                   # Favicon & aset publik
 ```
 
 ---
