@@ -25,15 +25,15 @@ Project Atlas dibuat untuk:
 
 ## 3. Fungsi & Fitur Utama
 
-1. **Landing Page Editorial** — hero foto perjalanan, ringkasan statistik arsip, pratinjau eksplorasi dunia, dan memori unggulan.
-2. **Atlas Interaktif** — peta dunia SVG, globe 3D, filter benua, pencarian negara berdasarkan nama/kode ISO, dan lima status negara (`Documented`, `Visited`, `Planned`, `Interested`, `Unexplored`).
+1. **Landing Page Editorial** — hero editorial dengan latar gradient, pola titik, dan ikon kompas; ringkasan statistik arsip, pratinjau eksplorasi dunia, dan memori unggulan.
+2. **Atlas Interaktif** — peta dunia SVG, globe 3D, filter benua, pencarian negara berdasarkan nama/kode ISO, dan lima status negara dengan label UI `Terdokumentasi` (`documented`), `Dikunjungi` (`visited`), `Direncanakan` (`planned`), `Diminati` (`interested`), dan `Belum Dijelajahi` (`unknown`).
 3. **Katalog & Dossier Negara** — ringkasan negara, foto, daftar tempat, memori terkait, galeri, dan suvenir.
 4. **Arsip Memori (CRUD)** — judul, tempat, negara, tanggal, ringkasan, catatan jurnal, tag, favorit, referensi foto, dan suvenir.
 5. **Jurnal Perjalanan** — catatan kronologis dan reflektif yang terhubung ke memori dan negara.
 6. **Kabinet Suvenir** — galeri artefak fisik seperti kerajinan, tekstil, tiket, stempel, kartu pos, dan koin.
 7. **Teater Video** — halaman khusus untuk memutar dan mengelola video perjalanan.
 8. **Museum 3D** — ruang pameran interaktif berbasis Three.js dengan arsitektur, pencahayaan, ekshibisi, karakter, dan navigasi kamera.
-9. **Paspor Penjelajah** — dossier bergaya paspor dengan cap visa, catatan perjalanan, dan inventaris artefak; dapat dicetak/diekspor ke PDF.
+9. **Paspor Penjelajah** — dossier bergaya paspor dengan cap visa, catatan perjalanan, dan sorotan suvenir pertama dari setiap memori; tombol `Print Dossier / Save as PDF` memakai `window.print()` dan pengguna memilih “Save as PDF” di dialog cetak browser (tidak ada ekspor PDF programatik).
 10. **Backup & Restore** — ekspor/impor seluruh arsip dalam JSON biasa atau terenkripsi AES-GCM 256-bit dengan derivasi PBKDF2.
 11. **Penyimpanan Media Lokal** — foto disimpan sebagai Blob di IndexedDB; File System Access API memungkinkan pemilihan file langsung dari perangkat.
 12. **PWA & Diagnostik** — manifest/service worker untuk pemasangan aplikasi, serta alat reset ke data kurasi atau arsip kosong.
@@ -103,6 +103,6 @@ Sebagian pengujian (`atlas_3d_master`, `museum_*`, `search`, `security_a11y`) me
 
 ## 8. Privasi, Atribusi & Lisensi
 
-- Data memori, jurnal, dan media pribadi disimpan di perangkat pengguna; tidak ada pengiriman ke server eksternal.
+- Data memori, jurnal, dan media pribadi disimpan di perangkat pengguna; tidak ada pengiriman data pribadi ke server eksternal. Gambar contoh dimuat dari Unsplash.
 - Foto contoh dari Unsplash digunakan sesuai ketentuan lisensi dan atribusi fotografer.
 - Belum ada berkas lisensi kode di repo. Untuk penggunaan ulang, hubungi pemilik repo.
