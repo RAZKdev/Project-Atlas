@@ -303,8 +303,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* ── MOBILE TOUCH BOTTOM BAR (Fixed & Accessible) ────────────────────── */}
       <nav 
-        className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-museum-border bg-museum-surface/95 backdrop-blur-md px-2 py-1 flex items-center justify-around shadow-2xl"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-museum-border bg-museum-surface px-2 py-1.5 flex items-center justify-around shadow-2xl"
         aria-label="Navigasi Seluler"
+        style={{ WebkitTransform: 'translateZ(0)' }}
       >
         {/* 1. Beranda */}
         <button

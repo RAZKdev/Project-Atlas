@@ -131,6 +131,27 @@ export const Museum3D: React.FC<Museum3DProps> = ({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Force landscape on mobile when entering walkthrough mode (Requirement: Museum 3D landscape)
+  useEffect(() => {
+    if (isMobile && viewMode === 'walkthrough') {
+      const lockOrientation = async () => {
+        try {
+          // @ts-ignore - ScreenOrientation.lock exists on mobile browsers but not in TypeScript lib
+          await screen.orientation?.lock('landscape');
+        } catch {
+          // Ignore if not supported or user denies
+        }
+      };
+      lockOrientation();
+    } else if (document.fullscreenElement === null && screen.orientation?.type?.startsWith('landscape')) {
+      // Unlock when exiting walkthrough
+      try {
+        // @ts-ignore - ScreenOrientation.unlock exists on mobile browsers but not in TypeScript lib
+        screen.orientation?.unlock();
+      } catch {}
+    }
+  }, [isMobile, viewMode]);
+
   // Listen to fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -769,9 +790,10 @@ export const Museum3D: React.FC<Museum3DProps> = ({
       </div>
 
       {/* ── Reticle & Proximity Prompt HUD (Walkthrough Mode) ──────────────── */}
+      {/* Minimal HUD - no descriptive text per user request */}
       {viewMode === 'walkthrough' && !isPaused && (
         <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center z-10">
-          {/* First-person Reticle (only in POV 1) */}
+          {/* First-person Reticle (only in POV 1) - minimal */}
           {currentPOV === 'first_person' && (
             <div className="relative flex items-center justify-center">
               {focusedExhibit ? (
@@ -785,7 +807,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({
             </div>
           )}
 
-          {/* Proximity Interaction Prompt */}
+          {/* Proximity Interaction Prompt - minimal, no descriptive text */}
           {focusedExhibit && (
             <div className="mt-8 flex flex-col items-center pointer-events-auto animate-bounce">
               <button
@@ -796,7 +818,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({
                   E
                 </span>
                 <span className="text-xs font-mono font-medium">
-                  Periksa {focusedExhibit.title.split('&')[0]}
+                  Periksa
                 </span>
               </button>
               <span className="text-[10px] font-mono text-museum-gold/90 mt-1">

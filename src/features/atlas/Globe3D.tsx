@@ -48,7 +48,8 @@ interface HoveredCountryInfo {
 }
 
 /**
- * Procedural fallback canvas texture to guarantee instant photorealistic rendering
+ * Procedural fallback canvas texture - solid dark ocean base (no dark ovals/ellipses)
+ * Avoids the "black oval box" artifact visible before hi-res texture loads
  */
 function createProceduralEarthTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -56,33 +57,21 @@ function createProceduralEarthTexture(): THREE.CanvasTexture {
   canvas.height = 512;
   const ctx = canvas.getContext('2d')!;
 
-  // 1. Deep ocean base with realistic gradient
-  const oceanGrad = ctx.createLinearGradient(0, 0, 0, 512);
-  oceanGrad.addColorStop(0, '#0a2342');
-  oceanGrad.addColorStop(0.5, '#0d325c');
-  oceanGrad.addColorStop(1, '#0a2342');
-  ctx.fillStyle = oceanGrad;
+  // Solid dark ocean base - no gradient, no ellipses that create black ovals
+  ctx.fillStyle = '#0b1d3a'; // Dark ocean blue
   ctx.fillRect(0, 0, 1024, 512);
 
-  // 2. Continents silhouette
-  ctx.fillStyle = '#1e3f20'; // Lush vegetation / landmass
-  ctx.beginPath();
-  ctx.ellipse(600, 200, 200, 100, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#2d5a27';
-  ctx.beginPath();
-  ctx.ellipse(540, 290, 90, 110, 0.2, 0, Math.PI * 2); // Africa
-  ctx.fill();
-  ctx.fillStyle = '#264e26';
-  ctx.beginPath();
-  ctx.ellipse(280, 170, 110, 80, -0.2, 0, Math.PI * 2); // North America
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(330, 330, 70, 100, 0.3, 0, Math.PI * 2); // South America
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(820, 360, 60, 45, 0, 0, Math.PI * 2); // Australia
-  ctx.fill();
+  // Very subtle land hint - just noise/speckles, no distinct shapes
+  // This prevents the "kotak lonjong hitam" artifact while texture loads
+  ctx.fillStyle = '#142d15'; // Very dark green, barely visible
+  for (let i = 0; i < 120; i++) {
+    const x = Math.random() * 1024;
+    const y = Math.random() * 512;
+    const r = Math.random() * 8 + 2;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -1196,6 +1185,35 @@ export const Globe3D: React.FC<Globe3DProps> = ({
             <span>Live UTC</span>
           </div>
 
+          {/* Continent Filter Pills (merged into top bar to avoid overlap with navbar) */}
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-museum-surface/80 border border-museum-border/70 pointer-events-auto flex-wrap max-w-full">
+            {['all', 'Asia', 'Europe', 'Africa', 'North America', 'South America', 'Oceania'].map(cont => {
+              const labelMap: Record<string, string> = {
+                all: 'Semua',
+                Asia: 'Asia',
+                Europe: 'Eropa',
+                Africa: 'Afrika',
+                'North America': 'Amerika U.',
+                'South America': 'Amerika S.',
+                Oceania: 'Oseania',
+              };
+              const isSelected = selectedContinent === cont;
+              return (
+                <button
+                  key={cont}
+                  onClick={() => setSelectedContinent(cont)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] whitespace-nowrap transition-all ${
+                    isSelected
+                      ? 'bg-earth-600 text-stone-100 font-medium shadow-sm'
+                      : 'text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  {labelMap[cont]}
+                </button>
+              );
+            })}
+          </div>
+
           {/* QA Diagnostics Button */}
           <button
             onClick={() => setIsQADashboardOpen(true)}
@@ -1227,37 +1245,6 @@ export const Globe3D: React.FC<Globe3DProps> = ({
           >
             {autoRotate ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
           </button>
-        </div>
-      </div>
-
-      {/* CONTINENT FILTER PILLS (Floating Top Center) */}
-      <div className="absolute top-16 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
-        <div className="flex items-center gap-1 overflow-x-auto max-w-full px-3 py-1.5 rounded-full bg-museum-surface/80 backdrop-blur-md border border-museum-border/70 pointer-events-auto">
-          {['all', 'Asia', 'Europe', 'Africa', 'North America', 'South America', 'Oceania'].map(cont => {
-            const labelMap: Record<string, string> = {
-              all: 'Semua Benua',
-              Asia: 'Asia',
-              Europe: 'Eropa',
-              Africa: 'Afrika',
-              'North America': 'Amerika Utara',
-              'South America': 'Amerika Selatan',
-              Oceania: 'Oseania',
-            };
-            const isSelected = selectedContinent === cont;
-            return (
-              <button
-                key={cont}
-                onClick={() => setSelectedContinent(cont)}
-                className={`px-2.5 py-1 rounded-full text-[11px] whitespace-nowrap transition-all ${
-                  isSelected
-                    ? 'bg-earth-600 text-stone-100 font-medium shadow-sm'
-                    : 'text-stone-400 hover:text-stone-200'
-                }`}
-              >
-                {labelMap[cont]}
-              </button>
-            );
-          })}
         </div>
       </div>
 

@@ -345,34 +345,7 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
               </div>
             </div>
 
-            {/* Feature Highlights Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-5 rounded-2xl border border-parchment-800 bg-museum-surface/70 space-y-2">
-                <span className="text-2xl block">🎥</span>
-                <h3 className="font-serif text-base font-bold text-parchment-100">3 Sudut Pandang Kamera</h3>
-                <p className="text-xs font-mono text-parchment-400 leading-relaxed">
-                  Beralih seketika dengan tombol <kbd className="px-1 bg-parchment-800 text-parchment-200 rounded">V</kbd> antara POV 1 (FPS), POV 2 (Karakter Pundak), dan POV 3 (Sinematik Luas).
-                </p>
-              </div>
-
-              <div className="p-5 rounded-2xl border border-parchment-800 bg-museum-surface/70 space-y-2">
-                <span className="text-2xl block">🧍</span>
-                <h3 className="font-serif text-base font-bold text-parchment-100">Avatar Penjelajah 1.70m</h3>
-                <p className="text-xs font-mono text-parchment-400 leading-relaxed">
-                  Karakter proporsional dengan topi fedora, kacamata kuningan, mantel ekspedisi, dan tas selempang kulit teranimasi langkah kaki prosedural.
-                </p>
-              </div>
-
-              <div className="p-5 rounded-2xl border border-parchment-800 bg-museum-surface/70 space-y-2">
-                <span className="text-2xl block">🧱</span>
-                <h3 className="font-serif text-base font-bold text-parchment-100">Fisika Dinding & Tangga</h3>
-                <p className="text-xs font-mono text-parchment-400 leading-relaxed">
-                  Sistem tabrakan AABB mandiri dengan luncuran dinding natural (wall-sliding) serta kamera yang otomatis merapat saat mendekati dinding.
-                </p>
-              </div>
-            </div>
-
-            {/* Quick 6 Zones Overview */}
+            {/* Quick 6 Zones Overview - Simplified, no long descriptions */}
             <div className="space-y-4">
               <h3 className="font-serif text-xl font-bold text-parchment-100 flex items-center gap-2">
                 <span>📍</span> 6 Zona Kuratorial di Dalam Museum
@@ -387,7 +360,7 @@ export const MuseumPage: React.FC<MuseumPageProps> = ({ onSelectCountry }) => {
                       <span className="text-2xl">{zone.icon}</span>
                       <h4 className="font-serif text-base font-bold text-parchment-100">{zone.name}</h4>
                     </div>
-                    <p className="text-xs text-parchment-400 leading-relaxed">{zone.description}</p>
+                    {/* Deskripsi dihapus per request - hanya nama & ikon zona */}
                   </div>
                 ))}
               </div>

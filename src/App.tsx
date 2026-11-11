@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { Suspense, useState, useEffect, useCallback } from 'react';
 import { storageService } from './core/services/storageService';
 import { Country, Memory, Souvenir, AtlasStats, CountryStatus } from './core/contracts';
 import { Navbar, NavTab } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
 import { LandingPage } from './features/landing/LandingPage';
-import { AtlasPage } from './features/atlas/AtlasPage';
 import { CountryDetailPage } from './features/countries/CountryDetailPage';
 import { CountriesCatalog } from './features/countries/CountriesCatalog';
 import { MemoriesPage } from './features/memories/MemoriesPage';
@@ -16,7 +15,14 @@ import { VideoTheaterPage } from './features/videos/VideoTheaterPage';
 import { AboutPage } from './features/about/AboutPage';
 import { BackupModal } from './features/backup/BackupModal';
 import { PassportDossierModal } from './features/dossier/PassportDossierModal';
-import { MuseumPage } from './features/museum/MuseumPage';
+
+const AtlasPage = React.lazy(() =>
+  import('./features/atlas/AtlasPage').then(module => ({ default: module.AtlasPage }))
+);
+
+const MuseumPage = React.lazy(() =>
+  import('./features/museum/MuseumPage').then(module => ({ default: module.MuseumPage }))
+);
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
@@ -256,8 +262,20 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className={`flex-1${activeTab === 'museum' ? '' : ' pt-8 pb-20 lg:pb-0'}`}>
-        {renderContent()}
+      <main className={`flex-1${activeTab === 'museum' ? '' : ' pt-8 pb-24 lg:pb-0'}`}>
+        <Suspense
+          fallback={
+            <div
+              className="flex items-center justify-center py-24 text-sm text-[#B8AC9C]"
+              role="status"
+              aria-live="polite"
+            >
+              Memuat...
+            </div>
+          }
+        >
+          {renderContent()}
+        </Suspense>
       </main>
 
       {/* Archival Footer */}
