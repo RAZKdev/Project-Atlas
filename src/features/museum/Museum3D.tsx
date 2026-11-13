@@ -98,7 +98,13 @@ export const Museum3D: React.FC<Museum3DProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [focusedExhibit, setFocusedExhibit] = useState<InteractableExhibit | null>(null);
   const [activeModalExhibit, setActiveModalExhibit] = useState<InteractableExhibit | null>(null);
-  const [quality, setQuality] = useState<MuseumQualityTier>('high');
+  const [quality, setQuality] = useState<MuseumQualityTier>(() => {
+    if (typeof window === 'undefined') return 'medium';
+    const isMobileDevice =
+      window.innerWidth < 768 ||
+      (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches);
+    return isMobileDevice ? 'low' : 'medium';
+  });
   const [isMobile, setIsMobile] = useState(false);
   const [webglError, setWebglError] = useState<string | null>(null);
   const [headBobEnabled, setHeadBobEnabled] = useState(true);
@@ -470,7 +476,7 @@ export const Museum3D: React.FC<Museum3DProps> = ({
     }
 
     renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality === 'high' ? 2 : 1.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality === 'high' ? 2 : (quality === 'medium' ? 1.5 : 1.0)));
     renderer.shadowMap.enabled = quality !== 'low';
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;

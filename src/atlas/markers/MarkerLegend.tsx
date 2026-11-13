@@ -16,7 +16,7 @@ export const MarkerLegend: React.FC = () => {
   const regionEntries = Object.values(REGION_COLORS);
 
   return (
-    <div className="absolute bottom-4 left-4 z-20 select-none">
+    <div className="absolute top-16 right-3 sm:right-4 z-20 select-none max-w-[calc(100vw-2rem)]">
       <div className="bg-museum-base/90 backdrop-blur-md border border-museum-border rounded-xl shadow-xl overflow-hidden max-w-xs transition-all">
         {/* Header toggle */}
         <button

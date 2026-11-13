@@ -24,7 +24,7 @@ export const Footer: React.FC<FooterProps> = ({ onRefresh, onOpenBackup, onOpenP
   };
 
   return (
-    <footer className="border-t border-museum-border bg-museum-surface mt-20 text-parchment-400">
+    <footer className="border-t border-museum-border bg-museum-surface mt-20 pb-24 lg:pb-0 text-parchment-400">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
           

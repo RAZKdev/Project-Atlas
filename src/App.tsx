@@ -20,10 +20,6 @@ const AtlasPage = React.lazy(() =>
   import('./features/atlas/AtlasPage').then(module => ({ default: module.AtlasPage }))
 );
 
-const MuseumPage = React.lazy(() =>
-  import('./features/museum/MuseumPage').then(module => ({ default: module.MuseumPage }))
-);
-
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
@@ -242,16 +238,13 @@ export const App: React.FC = () => {
       case 'about':
         return <AboutPage />;
 
-      case 'museum':
-        return <MuseumPage onSelectCountry={handleSelectCountry} />;
-
       default:
         return null;
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#121110] text-[#EAE2D7] flex flex-col font-sans selection:bg-earth-500 selection:text-white">
+    <div className="min-h-screen bg-[#121110] text-[#EAE2D7] flex flex-col font-sans selection:bg-earth-500 selection:text-white w-full max-w-full overflow-x-hidden">
       {/* Editorial Museum Navbar */}
       <Navbar
         activeTab={activeTab}
@@ -262,7 +255,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className={`flex-1${activeTab === 'museum' ? '' : ' pt-8 pb-24 lg:pb-0'}`}>
+      <main className="flex-1 w-full max-w-full overflow-x-hidden pt-8 pb-24 lg:pb-0">
         <Suspense
           fallback={
             <div

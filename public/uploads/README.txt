@@ -1,1 +1,0 @@
-Folder ini dapat digunakan untuk meletakkan foto atau video pribadi Anda secara langsung dari laptop. File di folder ini dapat diakses secara lokal melalui path /uploads/nama-file.jpg atau /uploads/video.mp4.

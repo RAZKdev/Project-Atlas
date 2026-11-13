@@ -21,7 +21,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onSelectCountry,
 }) => {
   return (
-    <div className="space-y-24 sm:space-y-32">
+    <div className="space-y-24 sm:space-y-32 w-full max-w-full overflow-hidden">
       
       {/* 1. HERO SECTION */}
       <section className="relative min-h-[85vh] flex items-center justify-center overflow-hidden -mt-6">
@@ -134,7 +134,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         {/* Discovery visual banner card */}
         <div 
           onClick={() => onNavigate('atlas')}
-          className="relative rounded-xl overflow-hidden border border-museum-border group cursor-pointer aspect-[21/9] min-h-[300px]"
+          className="relative rounded-xl overflow-hidden border border-museum-border group cursor-pointer w-full max-w-full aspect-[16/9] sm:aspect-[21/9] min-h-[180px] sm:min-h-[300px]"
         >
           <img
             src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1800&q=80"

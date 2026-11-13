@@ -1,10 +1,11 @@
 /**
  * Service Worker: Project Atlas PWA Offline Shell
- * Version: project-atlas-v1.2
+ * Version: project-atlas-v1.3
+ * Upgraded from project-atlas-shell-v1.2 and project-atlas-runtime-v1.2
  */
 
-const CACHE_NAME = 'project-atlas-shell-v1.2';
-const RUNTIME_CACHE = 'project-atlas-runtime-v1.2';
+const CACHE_NAME = 'project-atlas-shell-v1.3';
+const RUNTIME_CACHE = 'project-atlas-runtime-v1.3';
 
 // Critical application shell assets to pre-cache on install
 const PRECACHE_ASSETS = [

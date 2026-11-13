@@ -50,11 +50,13 @@ Project Atlas dibuat untuk:
 | Penyimpanan | `localStorage`, IndexedDB, File System Access API |
 | Keamanan data | Web Crypto API (AES-GCM 256-bit, PBKDF2) |
 | PWA | Web App Manifest, Service Worker |
+| Mobile | Capacitor 8 (^8.6.0) untuk shell Android |
 
 ## 5. Struktur Direktori
 
 ```text
 Project-Atlas/
+├── android/                 # Proyek Capacitor Android
 ├── src/
 │   ├── atlas/               # Registry negara, koordinat, globe, marker
 │   ├── components/          # Layout dan komponen UI

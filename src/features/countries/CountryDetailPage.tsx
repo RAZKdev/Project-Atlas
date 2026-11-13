@@ -52,7 +52,7 @@ export const CountryDetailPage: React.FC<CountryDetailPageProps> = ({
       </div>
 
       {/* Hero / Cover Banner */}
-      <div className="relative rounded-2xl overflow-hidden border border-museum-border bg-museum-surface aspect-[21/9] min-h-[260px]">
+      <div className="relative rounded-2xl overflow-hidden border border-museum-border bg-museum-surface w-full max-w-full aspect-[16/9] sm:aspect-[21/9] min-h-[160px] sm:min-h-[260px]">
         {country.coverImage ? (
           <ArchivalImage
             src={country.coverImage}

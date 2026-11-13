@@ -16,7 +16,6 @@ import {
   Sparkles,
   ZoomIn,
   ZoomOut,
-  Search,
   X,
   CheckCircle,
   Navigation,
@@ -28,7 +27,7 @@ import {
 } from 'lucide-react';
 import { geoToVector3 } from '../../atlas/geo/geoToVector3';
 import { calculateSolarPosition, SolarPosition } from '../../atlas/globe/solarCalculations';
-import { countryRegistry, SearchMatch } from '../../atlas/countries/countryRegistry';
+import { countryRegistry } from '../../atlas/countries/countryRegistry';
 import { CanonicalCountry } from '../../atlas/countries/canonicalCountries';
 import { MarkerLegend } from '../../atlas/markers/MarkerLegend';
 import { AssetCoverageDashboard } from '../../atlas/diagnostics/AssetCoverageDashboard';
@@ -566,13 +565,9 @@ export const Globe3D: React.FC<Globe3DProps> = ({
   onSelectMemory,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
+  // Responsive default camera distance, computed once from the viewport aspect ratio
+  const defaultCameraZRef = useRef(4.8);
   const [autoRotate, setAutoRotate] = useState(true);
-  const [filterMode, setFilterMode] = useState<'all' | 'visited' | 'unvisited'>('all');
-  const [selectedContinent, setSelectedContinent] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
-
-  // Selected Pin modal with full Canonical Country metadata
   const [selectedPin, setSelectedPin] = useState<{
     country: Country;
     canonical?: CanonicalCountry;
@@ -593,6 +588,13 @@ export const Globe3D: React.FC<Globe3DProps> = ({
   const globeGroupRef = useRef<THREE.Group | null>(null);
   const pinsGroupRef = useRef<THREE.Group | null>(null);
   const pinMeshesRef = useRef<THREE.Mesh[]>([]);
+  // Maps InstancedMesh instanceId -> country payload (low-power/mobile pin system)
+  const pinInstanceMapRef = useRef<Map<number, { country: Country; landmark: LandmarkInfo; isVisited: boolean }>>(new Map());
+
+  // Latest autoRotate for the render loop (created once) + low-power flag for marker detail
+  const autoRotateRef = useRef(autoRotate);
+  autoRotateRef.current = autoRotate;
+  const isLowPowerRef = useRef(false);
 
   // Smooth target rotation state
   const targetRotationRef = useRef<{ x: number; y: number } | null>(null);
@@ -611,29 +613,8 @@ export const Globe3D: React.FC<Globe3DProps> = ({
     return map;
   }, [memories]);
 
-  // Filtered countries for display (considering Continent and Status)
-  const displayedCountries = useMemo(() => {
-    return countries.filter(c => {
-      // Continent filter
-      if (selectedContinent !== 'all' && c.continent !== selectedContinent) {
-        return false;
-      }
-      // Status filter
-      if (filterMode === 'visited' && c.status !== 'visited' && c.status !== 'documented') {
-        return false;
-      }
-      if (filterMode === 'unvisited' && (c.status === 'visited' || c.status === 'documented')) {
-        return false;
-      }
-      return true;
-    });
-  }, [countries, filterMode, selectedContinent]);
-
-  // Global search across countries, capitals, landmarks, and ISO codes
-  const searchResults: SearchMatch[] = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    return countryRegistry.search(searchQuery, 8);
-  }, [searchQuery]);
+  // Countries displayed on the globe — filtering from the page level is authoritative
+  const displayedCountries = countries;
 
   // Statistics counters
   const stats = useMemo(() => {
@@ -689,9 +670,9 @@ export const Globe3D: React.FC<Globe3DProps> = ({
 
   // Reset view to Indonesia / default
   const handleResetView = () => {
-    targetRotationRef.current = { x: 0, y: 1.6 };
+    targetRotationRef.current = { x: 0, y: 2.88 };
     if (cameraRef.current) {
-      cameraRef.current.position.z = 4.8;
+      cameraRef.current.position.z = defaultCameraZRef.current;
     }
     setSelectedPin(null);
   };
@@ -701,13 +682,20 @@ export const Globe3D: React.FC<Globe3DProps> = ({
     if (!cameraRef.current) return;
     const step = 0.6;
     const newZ = cameraRef.current.position.z + (direction === 'in' ? -step : step);
-    cameraRef.current.position.z = THREE.MathUtils.clamp(newZ, 3.2, 9.0);
+    cameraRef.current.position.z = THREE.MathUtils.clamp(newZ, 3.2, 12.0);
   };
 
   // Main Three.js Scene Setup & Animation Loop
   useEffect(() => {
     const container = mountRef.current;
     if (!container) return;
+
+    // Low-power devices (mobile/coarse pointer): lighter render settings for smooth rotation
+    const isLowPower =
+      (typeof window !== 'undefined' &&
+        (window.matchMedia?.('(pointer: coarse)')?.matches ?? false)) ||
+      window.innerWidth < 768;
+    isLowPowerRef.current = isLowPower;
 
     const width = container.clientWidth || 800;
     const height = container.clientHeight || 580;
@@ -716,15 +704,27 @@ export const Globe3D: React.FC<Globe3DProps> = ({
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    // 2. Camera
+    // 2. Camera — distance adapts to aspect so the whole globe fits on tall phones
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.z = 4.8;
+    const GLOBE_RADIUS = 1.8;
+    const FOV_DEG = 45;
+    const halfVerticalFov = Math.tan((FOV_DEG * Math.PI) / 360);
+    const halfHorizontalFov = halfVerticalFov * (width / height);
+    const limitingHalfFov = Math.min(halfVerticalFov, halfHorizontalFov);
+    const fitDistance = GLOBE_RADIUS / Math.sin(Math.atan(limitingHalfFov));
+    const initialCameraZ = Math.max(4.8, fitDistance * 1.06);
+    camera.position.z = initialCameraZ;
+    defaultCameraZRef.current = initialCameraZ;
     cameraRef.current = camera;
 
-    // 3. Renderer with high-DPI support
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    // 3. Renderer — antialias off + lower pixel ratio on mobile prevents choppy frames
+    const renderer = new THREE.WebGLRenderer({
+      antialias: !isLowPower,
+      alpha: true,
+      powerPreference: 'high-performance',
+    });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isLowPower ? 1.25 : 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
@@ -746,13 +746,14 @@ export const Globe3D: React.FC<Globe3DProps> = ({
 
     // 5. Globe Group
     const globeGroup = new THREE.Group();
-    globeGroup.rotation.y = 1.6;
+    // Start with Indonesia/Asia facing the camera (not the empty Pacific)
+    globeGroup.rotation.y = 2.88;
     scene.add(globeGroup);
     globeGroupRef.current = globeGroup;
 
     // 6. Earth Sphere Geometry & Texture
-    const radius = 1.8;
-    const sphereGeo = new THREE.SphereGeometry(radius, 64, 64);
+    const radius = GLOBE_RADIUS;
+    const sphereGeo = new THREE.SphereGeometry(radius, isLowPower ? 32 : 64, isLowPower ? 32 : 64);
     const initialTexture = createProceduralEarthTexture();
     const earthMat = new THREE.MeshStandardMaterial({
       map: initialTexture,
@@ -792,7 +793,7 @@ export const Globe3D: React.FC<Globe3DProps> = ({
         gl_FragColor = vec4(0.22, 0.68, 1.0, 1.0) * intensity;
       }
     `;
-    const atmosphereGeo = new THREE.SphereGeometry(radius * 1.03, 48, 48);
+    const atmosphereGeo = new THREE.SphereGeometry(radius * 1.03, isLowPower ? 24 : 48, isLowPower ? 24 : 48);
     const atmosphereMat = new THREE.ShaderMaterial({
       vertexShader: atmosphereVertexShader,
       fragmentShader: atmosphereFragmentShader,
@@ -822,23 +823,27 @@ export const Globe3D: React.FC<Globe3DProps> = ({
 
     // 10. Animation Loop
     let animationFrameId: number;
+    const clock = new THREE.Clock();
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
+      const delta = Math.min(clock.getDelta(), 0.1);
 
       // Handle smooth camera glide towards target country
       if (targetRotationRef.current && globeGroup) {
         const target = targetRotationRef.current;
         const diffX = target.x - globeGroup.rotation.x;
         const diffY = target.y - globeGroup.rotation.y;
+        const lerp = 1 - Math.exp(-8 * delta);
 
-        globeGroup.rotation.x += diffX * 0.08;
-        globeGroup.rotation.y += diffY * 0.08;
+        globeGroup.rotation.x += diffX * lerp;
+        globeGroup.rotation.y += diffY * lerp;
 
         if (Math.abs(diffX) < 0.001 && Math.abs(diffY) < 0.001) {
           targetRotationRef.current = null;
         }
-      } else if (autoRotate && !isDraggingRef.current && globeGroup) {
-        globeGroup.rotation.y += 0.0015;
+      } else if (autoRotateRef.current && !isDraggingRef.current && globeGroup) {
+        // Delta-time based rotation keeps speed consistent even when frame rate drops
+        globeGroup.rotation.y += delta * 0.09;
       }
 
       renderer.render(scene, camera);
@@ -860,20 +865,36 @@ export const Globe3D: React.FC<Globe3DProps> = ({
     };
   }, []);
 
-  // Update 3D Flagpoles whenever countries list or filter changes
+  // Update 3D Flagpoles whenever the countries list changes
   useEffect(() => {
     const pinsGroup = pinsGroupRef.current;
     if (!pinsGroup) return;
 
+    const disposeGroup = (root: THREE.Object3D) => {
+      root.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.isMesh) {
+          mesh.geometry?.dispose();
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          mats.forEach((m) => m?.dispose?.());
+        }
+      });
+    };
+
+    // Rebuild cleanly (dispose old geometries/materials to avoid GPU leaks)
     while (pinsGroup.children.length > 0) {
       const obj = pinsGroup.children[0];
       pinsGroup.remove(obj);
+      disposeGroup(obj);
     }
     pinMeshesRef.current = [];
 
+    const lowPower = isLowPowerRef.current;
     const radius = 1.8;
-    const poleHeight = 0.055;
-    const poleRadius = 0.003;
+    // Phones show the full globe (smaller on screen), so pins get extra size there
+    const pinScale = lowPower ? 1.8 : 1;
+    const poleHeight = 0.055 * pinScale;
+    const poleRadius = 0.003 * pinScale;
 
     // 1. Shared Flagpole Geometry
     const poleGeometry = new THREE.CylinderGeometry(poleRadius, poleRadius, poleHeight, 6);
@@ -886,7 +907,7 @@ export const Globe3D: React.FC<Globe3DProps> = ({
     });
 
     // 2. Finial tip sphere on top of the pole
-    const tipGeometry = new THREE.SphereGeometry(0.005, 8, 8);
+    const tipGeometry = new THREE.SphereGeometry(0.005 * pinScale, 8, 8);
 
     const tipMaterial = new THREE.MeshStandardMaterial({
       color: 0xf59e0b,
@@ -897,9 +918,12 @@ export const Globe3D: React.FC<Globe3DProps> = ({
     });
 
     // 3. Pennant Flag Cloth (relative to pole apex)
+    const flagWidth = 0.038 * pinScale;
+    const flagDrop = 0.026 * pinScale;
+    const flagMid = 0.013 * pinScale;
     const flagShape = new THREE.Shape();
-    flagShape.moveTo(0, poleHeight - 0.026);
-    flagShape.lineTo(0.038, poleHeight - 0.013);
+    flagShape.moveTo(0, poleHeight - flagDrop);
+    flagShape.lineTo(flagWidth, poleHeight - flagMid);
     flagShape.lineTo(0, poleHeight);
     flagShape.closePath();
     const flagGeometry = new THREE.ShapeGeometry(flagShape);
@@ -924,64 +948,177 @@ export const Globe3D: React.FC<Globe3DProps> = ({
       side: THREE.DoubleSide,
     });
 
-    displayedCountries.forEach(country => {
-      const coords = COUNTRY_COORDINATES[country.code.toUpperCase()];
-      if (!coords) return;
+    // Shared, touch-friendly hitbox: one geometry for all countries (scaled per pin)
+    const hitRadius = lowPower ? 0.085 : 0.038;
+    const hitGeometry = new THREE.CylinderGeometry(hitRadius, hitRadius, poleHeight, 6);
+    hitGeometry.translate(0, poleHeight / 2, 0);
+    const hitMaterial = new THREE.MeshBasicMaterial({ visible: false });
 
-      // Single Authoritative Geographic Projection Utility
-      const proj = geoToVector3(coords.lat, coords.lng, radius, 1.002);
-      const surfacePos = new THREE.Vector3(proj.position.x, proj.position.y, proj.position.z);
-      const normal = new THREE.Vector3(proj.normal.x, proj.normal.y, proj.normal.z);
+    // Pre-compute every country position once (shared by both render paths)
+    const targets = displayedCountries
+      .map((country) => {
+        const coords = COUNTRY_COORDINATES[country.code.toUpperCase()];
+        if (!coords) return null;
+        const proj = geoToVector3(coords.lat, coords.lng, radius, 1.002);
+        const isVisited = country.status === 'visited' || country.status === 'documented';
+        return {
+          country,
+          landmark: getCountryLandmark(country.code, country.name),
+          isVisited,
+          position: new THREE.Vector3(proj.position.x, proj.position.y, proj.position.z),
+          normal: new THREE.Vector3(proj.normal.x, proj.normal.y, proj.normal.z),
+        };
+      })
+      .filter((t): t is NonNullable<typeof t> => t !== null);
 
-      const isVisited = country.status === 'visited' || country.status === 'documented';
-      const landmark = getCountryLandmark(country.code, country.name);
+    if (lowPower) {
+      // ── Mobile / low-power: InstancedMesh — all pins in ~5 draw calls ─────
+      const up = new THREE.Vector3(0, 1, 0);
+      const tempMatrix = new THREE.Matrix4();
+      const tempQuat = new THREE.Quaternion();
+      const unitScale = new THREE.Vector3(1, 1, 1);
+      const tipPos = new THREE.Vector3();
 
-      const flagGroup = new THREE.Group();
-      flagGroup.position.copy(surfacePos);
-      flagGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+      const visitedTargets = targets.filter(t => t.isVisited);
+      const unvisitedTargets = targets.filter(t => !t.isVisited);
 
-      // A. Miniatur Bangunan 3D Ikonik Negara
-      const { group: landmarkMesh, apexHeight } = buildLandmark3D(landmark);
-      flagGroup.add(landmarkMesh);
+      const poleInst = new THREE.InstancedMesh(poleGeometry, poleMaterial, targets.length);
+      const tipInst = new THREE.InstancedMesh(tipGeometry, tipMaterial, targets.length);
+      const blueInst = new THREE.InstancedMesh(flagGeometry, visitedFlagMaterial, Math.max(visitedTargets.length, 1));
+      const redInst = new THREE.InstancedMesh(flagGeometry, unvisitedFlagMaterial, Math.max(unvisitedTargets.length, 1));
+      const hitInst = new THREE.InstancedMesh(hitGeometry, hitMaterial, targets.length);
+      blueInst.count = visitedTargets.length;
+      redInst.count = unvisitedTargets.length;
+      hitInst.userData = { instancedPins: true };
 
-      // B. Tiang Bendera Tertancap di Puncak Bangunan
-      const poleMesh = new THREE.Mesh(poleGeometry, poleMaterial);
-      poleMesh.position.y = apexHeight;
+      const instanceMap = pinInstanceMapRef.current;
+      let vi = 0;
+      let ui = 0;
 
-      // C. Bola Finial Emas di Ujung Tiang
-      const tipMesh = new THREE.Mesh(tipGeometry, tipMaterial);
-      tipMesh.position.y = apexHeight + poleHeight;
+      targets.forEach((t, i) => {
+        tempQuat.setFromUnitVectors(up, t.normal);
 
-      // D. Kain Bendera (Merah / Biru) Berkibar di Atas Bangunan
-      const clothMesh = new THREE.Mesh(
-        flagGeometry,
-        isVisited ? visitedFlagMaterial : unvisitedFlagMaterial
-      );
-      clothMesh.position.y = apexHeight;
+        // Pole + invisible hitbox at the surface
+        tempMatrix.compose(t.position, tempQuat, unitScale);
+        poleInst.setMatrixAt(i, tempMatrix);
+        hitInst.setMatrixAt(i, tempMatrix);
+        instanceMap.set(i, { country: t.country, landmark: t.landmark, isVisited: t.isVisited });
 
-      // E. Hitbox Raycaster mencakup Bangunan dan Bendera
-      const totalH = apexHeight + poleHeight;
-      const hitGeometry = new THREE.CylinderGeometry(0.038, 0.038, totalH, 8);
-      hitGeometry.translate(0, totalH / 2, 0);
-      const hitMaterial = new THREE.MeshBasicMaterial({ visible: false });
-      const hitMesh = new THREE.Mesh(hitGeometry, hitMaterial);
+        // Golden finial at the pole tip
+        tipPos.copy(t.normal).multiplyScalar(poleHeight).add(t.position);
+        tempMatrix.compose(tipPos, tempQuat, unitScale);
+        tipInst.setMatrixAt(i, tempMatrix);
 
-      hitMesh.userData = {
-        countryCode: country.code,
-        country: country,
-        landmark: landmark,
-        isVisited: isVisited,
-      };
+        // Pennant flag (separate instanced mesh per colour)
+        tempMatrix.compose(t.position, tempQuat, unitScale);
+        if (t.isVisited) {
+          blueInst.setMatrixAt(vi++, tempMatrix);
+        } else {
+          redInst.setMatrixAt(ui++, tempMatrix);
+        }
+      });
 
-      flagGroup.add(poleMesh);
-      flagGroup.add(tipMesh);
-      flagGroup.add(clothMesh);
-      flagGroup.add(hitMesh);
+      [poleInst, tipInst, blueInst, redInst, hitInst].forEach((m) => {
+        m.instanceMatrix.needsUpdate = true;
+        m.computeBoundingSphere();
+      });
 
-      pinsGroup.add(flagGroup);
-      pinMeshesRef.current.push(hitMesh);
-    });
+      pinsGroup.add(poleInst, tipInst, blueInst, redInst, hitInst);
+      pinMeshesRef.current = [hitInst];
+    } else {
+      // ── Desktop: full procedural landmarks, one group per country ─────────
+      targets.forEach((t) => {
+        const flagGroup = new THREE.Group();
+        flagGroup.position.copy(t.position);
+        flagGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), t.normal);
+
+        // A. Miniatur Bangunan 3D Ikonik Negara
+        const landmarkMesh = buildLandmark3D(t.landmark);
+        flagGroup.add(landmarkMesh.group);
+        const apexHeight = landmarkMesh.apexHeight;
+
+        // B. Tiang Bendera Tertancap di Puncak Bangunan
+        const poleMesh = new THREE.Mesh(poleGeometry, poleMaterial);
+        poleMesh.position.y = apexHeight;
+
+        // C. Bola Finial Emas di Ujung Tiang
+        const tipMesh = new THREE.Mesh(tipGeometry, tipMaterial);
+        tipMesh.position.y = apexHeight + poleHeight;
+
+        // D. Kain Bendera (Merah / Biru)
+        const clothMesh = new THREE.Mesh(
+          flagGeometry,
+          t.isVisited ? visitedFlagMaterial : unvisitedFlagMaterial
+        );
+        clothMesh.position.y = apexHeight;
+
+        // E. Hitbox Raycaster (scaled to building + flag height)
+        const totalH = apexHeight + poleHeight;
+        const hitMesh = new THREE.Mesh(hitGeometry, hitMaterial);
+        hitMesh.scale.set(1, totalH / poleHeight, 1);
+
+        hitMesh.userData = {
+          countryCode: t.country.code,
+          country: t.country,
+          landmark: t.landmark,
+          isVisited: t.isVisited,
+        };
+
+        flagGroup.add(poleMesh, tipMesh, clothMesh, hitMesh);
+        pinsGroup.add(flagGroup);
+        pinMeshesRef.current.push(hitMesh);
+      });
+    }
+
+    // Dispose shared resources when the list changes or component unmounts
+    return () => {
+      while (pinsGroup.children.length > 0) {
+        const obj = pinsGroup.children[0];
+        pinsGroup.remove(obj);
+        disposeGroup(obj);
+      }
+      poleGeometry.dispose();
+      tipGeometry.dispose();
+      flagGeometry.dispose();
+      hitGeometry.dispose();
+      poleMaterial.dispose();
+      tipMaterial.dispose();
+      visitedFlagMaterial.dispose();
+      unvisitedFlagMaterial.dispose();
+      hitMaterial.dispose();
+      pinInstanceMapRef.current = new Map();
+    };
   }, [displayedCountries]);
+
+  // Resolve a raycast intersection to a country payload.
+  // Supports both pin systems: instanced pins (mobile) and per-country groups (desktop).
+  const resolvePinHit = useCallback((intersects: THREE.Intersection[]) => {
+    if (intersects.length === 0) return null;
+
+    const hit = intersects[0];
+    const obj = hit.object as THREE.Mesh;
+
+    if (obj.userData?.instancedPins && typeof hit.instanceId === 'number') {
+      const payload = pinInstanceMapRef.current.get(hit.instanceId);
+      if (!payload) return null;
+      return {
+        country: payload.country,
+        landmark: payload.landmark,
+        isVisited: payload.isVisited,
+        countryCode: payload.country.code,
+      };
+    }
+
+    const country = obj.userData?.country as Country | undefined;
+    if (!country) return null;
+
+    return {
+      country,
+      landmark: obj.userData?.landmark as LandmarkInfo | undefined,
+      isVisited: Boolean(obj.userData?.isVisited),
+      countryCode: (obj.userData?.countryCode as string | undefined) ?? country.code,
+    };
+  }, []);
 
   // Pointer Interaction: Dragging, Zooming, and Raycasting
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -989,6 +1126,21 @@ export const Globe3D: React.FC<Globe3DProps> = ({
     previousMousePositionRef.current = { x: e.clientX, y: e.clientY };
     touchStartPosRef.current = { x: e.clientX, y: e.clientY };
     targetRotationRef.current = null;
+
+    // Keep receiving move/up events even if the finger leaves the canvas
+    const container = mountRef.current;
+    if (container) {
+      try {
+        container.setPointerCapture(e.pointerId);
+      } catch {
+        /* pointer capture unsupported — harmless */
+      }
+    }
+  };
+
+  const handlePointerCancel = () => {
+    isDraggingRef.current = false;
+    setHoveredCountry(null);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1021,20 +1173,17 @@ export const Globe3D: React.FC<Globe3DProps> = ({
     raycaster.setFromCamera(new THREE.Vector2(x, y), cameraRef.current);
 
     const intersects = raycaster.intersectObjects(pinMeshesRef.current, false);
+    const resolved = resolvePinHit(intersects);
 
-    if (intersects.length > 0) {
-      const hit = intersects[0].object as THREE.Mesh;
-      const country = hit.userData.country as Country;
-      if (country) {
-        setHoveredCountry({
-          country,
-          landmark: hit.userData.landmark || getCountryLandmark(country.code, country.name),
-          screenX: e.clientX - rect.left,
-          screenY: e.clientY - rect.top,
-        });
-        container.style.cursor = 'pointer';
-        return;
-      }
+    if (resolved) {
+      setHoveredCountry({
+        country: resolved.country,
+        landmark: resolved.landmark || getCountryLandmark(resolved.country.code, resolved.country.name),
+        screenX: e.clientX - rect.left,
+        screenY: e.clientY - rect.top,
+      });
+      container.style.cursor = 'pointer';
+      return;
     }
 
     setHoveredCountry(null);
@@ -1045,6 +1194,10 @@ export const Globe3D: React.FC<Globe3DProps> = ({
     isDraggingRef.current = false;
     const container = mountRef.current;
     if (!container || !cameraRef.current) return;
+
+    if (container.hasPointerCapture?.(e.pointerId)) {
+      container.releasePointerCapture(e.pointerId);
+    }
 
     const dist = Math.hypot(
       e.clientX - touchStartPosRef.current.x,
@@ -1060,23 +1213,21 @@ export const Globe3D: React.FC<Globe3DProps> = ({
       raycaster.setFromCamera(new THREE.Vector2(x, y), cameraRef.current);
 
       const intersects = raycaster.intersectObjects(pinMeshesRef.current, false);
+      const resolved = resolvePinHit(intersects);
 
-      if (intersects.length > 0) {
-        const hit = intersects[0].object as THREE.Mesh;
-        const country = hit.userData.country as Country;
-        if (country) {
-          focusOnCountry(country.code);
-        }
+      if (resolved) {
+        focusOnCountry(resolved.countryCode);
       }
     }
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (!cameraRef.current) return;
+    const camera = cameraRef.current;
+    if (!camera) return;
     const delta = e.deltaY * 0.003;
-    const newZ = cameraRef.current.position.z + delta;
-    cameraRef.current.position.z = THREE.MathUtils.clamp(newZ, 3.2, 9.0);
+    const newZ = camera.position.z + delta;
+    camera.position.z = THREE.MathUtils.clamp(newZ, 3.2, 12.0);
   };
 
   return (
@@ -1085,96 +1236,21 @@ export const Globe3D: React.FC<Globe3DProps> = ({
       {/* TOP CONTROL BAR & FILTERS */}
       <div className="absolute top-0 left-0 right-0 z-20 p-3 sm:p-4 bg-gradient-to-b from-[#0b0f14]/95 via-[#0b0f14]/80 to-transparent flex flex-wrap items-center justify-between gap-3 pointer-events-auto">
         
-        {/* Left: Statistics & Color Legend */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-museum-surface/90 border border-museum-border text-xs font-mono text-stone-200">
-            <GlobeIcon className="w-3.5 h-3.5 text-blue-400" />
+        {/* Left: Statistics (compact — page-level filters are authoritative) */}
+        <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-museum-surface/90 border border-museum-border text-[11px] font-mono text-stone-200">
+            <GlobeIcon className="w-3 h-3 text-blue-400" />
             <span>{stats.total} Negara</span>
           </div>
-
-          <button
-            onClick={() => setFilterMode(prev => prev === 'visited' ? 'all' : 'visited')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-              filterMode === 'visited'
-                ? 'bg-blue-600/30 border border-blue-400 text-blue-200 shadow-sm'
-                : 'bg-museum-surface/70 border border-museum-border text-stone-300 hover:border-blue-500/50'
-            }`}
-            title="Tampilkan negara dengan bendera biru (sudah dikunjungi)"
-          >
-            <span className="text-xs">🔵</span>
-            <span>{stats.visited} Bendera Biru</span>
-          </button>
-
-          <button
-            onClick={() => setFilterMode(prev => prev === 'unvisited' ? 'all' : 'unvisited')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-              filterMode === 'unvisited'
-                ? 'bg-red-600/30 border border-red-400 text-red-200 shadow-sm'
-                : 'bg-museum-surface/70 border border-museum-border text-stone-300 hover:border-red-500/50'
-            }`}
-            title="Tampilkan negara dengan bendera merah (belum dikunjungi)"
-          >
-            <span className="text-xs">🔴</span>
-            <span>{stats.unvisited} Bendera Merah</span>
-          </button>
-
+          <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-museum-surface/80 border border-museum-border text-[10px] font-mono text-stone-300">
+            <span className="text-blue-400">{stats.visited} 🔵</span>
+            <span className="text-stone-600">·</span>
+            <span className="text-red-400">{stats.unvisited} 🔴</span>
+          </div>
         </div>
 
-        {/* Right: Search 195 Countries & Quick Actions */}
-        <div className="flex items-center gap-2 relative">
-          
-          {/* Search Box */}
-          <div className="relative">
-            <div className="flex items-center gap-1.5 bg-museum-surface/90 border border-museum-border px-3 py-1.5 rounded-full focus-within:border-earth-400 transition-colors w-48 sm:w-60">
-              <Search className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setTimeout(() => setIsSearchFocused(false), 250)}
-                placeholder="Cari negara, ibu kota, atau landmark..."
-                className="bg-transparent text-xs text-stone-100 placeholder-stone-500 focus:outline-none w-full"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="text-stone-400 hover:text-stone-200">
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {/* Global Search Dropdown (Countries, Capitals, Landmarks) */}
-            {isSearchFocused && searchResults.length > 0 && (
-              <div className="absolute top-full right-0 mt-2 w-72 sm:w-80 bg-museum-surface border border-museum-border rounded-xl shadow-2xl overflow-hidden z-40 max-h-64 overflow-y-auto">
-                {searchResults.map(match => {
-                  const c = match.country;
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => {
-                        focusOnCountry(c.id);
-                        setSearchQuery('');
-                      }}
-                      className="w-full text-left px-3.5 py-2.5 text-xs flex items-center justify-between hover:bg-stone-800 transition-colors border-b border-museum-border/40 last:border-none cursor-pointer"
-                    >
-                      <div className="flex flex-col min-w-0 pr-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-stone-100 truncate">{c.displayName}</span>
-                          <span className="text-[10px] font-mono text-stone-400">({c.id})</span>
-                        </div>
-                        <span className="text-[11px] text-earth-300 truncate mt-0.5">
-                          {match.matchType === 'capital' ? `🏛️ Ibu Kota: ${match.matchedText}` :
-                           match.matchType === 'landmark' ? `📍 Landmark: ${match.matchedText}` :
-                           c.capital ? `${c.capital} • ${c.landmark.name}` : c.region}
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-mono text-stone-400 shrink-0">{c.region}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        {/* Right: Quick Actions */}
+        <div className="flex items-center gap-1.5 shrink-0">
 
           {/* Live UTC Solar Badge */}
           <div
@@ -1183,35 +1259,6 @@ export const Globe3D: React.FC<Globe3DProps> = ({
           >
             <Sun className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
             <span>Live UTC</span>
-          </div>
-
-          {/* Continent Filter Pills (merged into top bar to avoid overlap with navbar) */}
-          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-museum-surface/80 border border-museum-border/70 pointer-events-auto flex-wrap max-w-full">
-            {['all', 'Asia', 'Europe', 'Africa', 'North America', 'South America', 'Oceania'].map(cont => {
-              const labelMap: Record<string, string> = {
-                all: 'Semua',
-                Asia: 'Asia',
-                Europe: 'Eropa',
-                Africa: 'Afrika',
-                'North America': 'Amerika U.',
-                'South America': 'Amerika S.',
-                Oceania: 'Oseania',
-              };
-              const isSelected = selectedContinent === cont;
-              return (
-                <button
-                  key={cont}
-                  onClick={() => setSelectedContinent(cont)}
-                  className={`px-2 py-0.5 rounded-full text-[10px] whitespace-nowrap transition-all ${
-                    isSelected
-                      ? 'bg-earth-600 text-stone-100 font-medium shadow-sm'
-                      : 'text-stone-400 hover:text-stone-200'
-                  }`}
-                >
-                  {labelMap[cont]}
-                </button>
-              );
-            })}
           </div>
 
           {/* QA Diagnostics Button */}
@@ -1254,8 +1301,10 @@ export const Globe3D: React.FC<Globe3DProps> = ({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         onWheel={handleWheel}
-        className="w-full h-[540px] sm:h-[640px] cursor-grab active:cursor-grabbing"
+        className="w-full h-[540px] sm:h-[640px] cursor-grab active:cursor-grabbing touch-none"
+        style={{ touchAction: 'none', WebkitUserSelect: 'none' }}
       />
 
       {/* ZOOM & VIEW CONTROLS (Floating Bottom Left) */}
@@ -1308,7 +1357,7 @@ export const Globe3D: React.FC<Globe3DProps> = ({
 
       {/* SELECTED COUNTRY POP-UP CARD (Bottom Right Floating Card) */}
       {selectedPin && (
-        <div className="absolute bottom-5 right-5 z-30 w-80 sm:w-96 max-w-[calc(100vw-2.5rem)] bg-museum-surface/95 backdrop-blur-md border border-museum-border rounded-2xl shadow-2xl p-4 sm:p-5 overflow-hidden transition-all animate-fadeIn max-h-[80vh] overflow-y-auto">
+        <div className="absolute bottom-5 right-5 z-30 w-80 sm:w-96 max-w-[calc(100vw-2.5rem)] bg-museum-surface/95 backdrop-blur-md border border-museum-border rounded-2xl shadow-2xl p-4 sm:p-5 overflow-hidden transition-all animate-fadeIn max-h-[calc(100%-2.5rem)] overflow-y-auto">
           
           {/* Card Header */}
           <div className="flex items-start justify-between gap-3 mb-3">
@@ -1467,8 +1516,8 @@ export const Globe3D: React.FC<Globe3DProps> = ({
         onClose={() => setIsQADashboardOpen(false)}
       />
 
-      {/* FOOTER HELPER TEXT */}
-      <div className="absolute bottom-2 left-0 right-0 z-10 flex justify-center pointer-events-none">
+      {/* FOOTER HELPER TEXT (desktop only — on phones it collided with the zoom controls) */}
+      <div className="hidden lg:flex absolute bottom-2 left-0 right-0 z-10 justify-center pointer-events-none">
         <span className="text-[11px] font-mono text-stone-400 bg-museum-surface/60 px-3 py-1 rounded-full backdrop-blur-sm">
           Geser untuk memutar bola dunia • Scroll untuk zoom • Klik bendera negara untuk melihat arsip
         </span>

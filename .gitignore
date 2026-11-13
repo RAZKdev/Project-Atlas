@@ -34,3 +34,12 @@ docs/
 qa_shot_*.png
 screenshot.png
 
+# Uploads exclusion (protect private media and public server deployments)
+public/uploads/
+dist/uploads/
+
+# Local scripts & configs
+start.bat
+android/local.properties
+
+

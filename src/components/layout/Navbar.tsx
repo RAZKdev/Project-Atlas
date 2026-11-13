@@ -10,7 +10,6 @@ import {
   Shield, 
   Camera, 
   Film, 
-  Landmark, 
   Layers, 
   ChevronDown, 
   Menu, 
@@ -18,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 
-export type NavTab = 'home' | 'atlas' | 'journal' | 'videos' | 'memories' | 'countries' | 'souvenirs' | 'about' | 'museum';
+export type NavTab = 'home' | 'atlas' | 'journal' | 'videos' | 'memories' | 'countries' | 'souvenirs' | 'about';
 
 interface NavbarProps {
   activeTab: NavTab;
@@ -87,12 +86,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   const primaryNavItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: 'home', label: 'Beranda', icon: <Compass className="w-4 h-4" /> },
     { id: 'atlas', label: 'Atlas Dunia', icon: <Globe className="w-4 h-4" /> },
-    { 
-      id: 'museum', 
-      label: 'Museum Mini', 
-      icon: <Landmark className="w-4 h-4 text-amber-300" />,
-      badge: '3D'
-    },
     { id: 'memories', label: 'Memori', icon: <Camera className="w-4 h-4" /> },
     { id: 'journal', label: 'Jurnal', icon: <BookOpen className="w-4 h-4" /> },
   ];
@@ -150,19 +143,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           <nav className="hidden lg:flex items-center gap-1.5" aria-label="Navigasi Utama">
             {primaryNavItems.map(item => {
               const isActive = activeTab === item.id;
-              const isMuseum = item.id === 'museum';
               return (
                 <button
                   key={item.id}
                   onClick={(e) => handleNavigate(item.id, e)}
                   className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer min-h-[40px] ${
                     isActive
-                      ? isMuseum
-                        ? 'text-parchment-100 bg-amber-950/40 border border-amber-500/50 shadow-sm'
-                        : 'text-parchment-100 bg-museum-card border border-earth-500/30 shadow-sm'
-                      : isMuseum
-                        ? 'text-amber-200/80 hover:text-amber-100 hover:bg-amber-950/20'
-                        : 'text-parchment-400 hover:text-parchment-200 hover:bg-white/5'
+                      ? 'text-parchment-100 bg-museum-card border border-earth-500/30 shadow-sm'
+                      : 'text-parchment-400 hover:text-parchment-200 hover:bg-white/5'
                   }`}
                 >
                   {item.icon}
@@ -260,7 +248,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 e.stopPropagation();
                 onOpenPassport();
               }}
-              className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono bg-museum-card hover:bg-museum-hover border border-museum-border text-stone-300 hover:text-parchment-100 transition-colors cursor-pointer min-h-[36px]"
+              className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono bg-museum-card hover:bg-museum-hover border border-museum-border text-stone-300 hover:text-parchment-100 transition-colors cursor-pointer min-h-[36px]"
               title="Dossier Paspor & Jurnal Lapangan (Cetak / PDF)"
             >
               <Printer className="w-3.5 h-3.5 text-earth-400" />
@@ -274,7 +262,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 e.stopPropagation();
                 onOpenBackup();
               }}
-              className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono bg-museum-card hover:bg-museum-hover border border-museum-border text-stone-300 hover:text-parchment-100 transition-colors cursor-pointer min-h-[36px]"
+              className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono bg-museum-card hover:bg-museum-hover border border-museum-border text-stone-300 hover:text-parchment-100 transition-colors cursor-pointer min-h-[36px]"
               title="Cadangkan & Ekspor / Impor Data Arsip"
             >
               <Shield className="w-3.5 h-3.5 text-earth-400" />
@@ -329,25 +317,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span>Atlas 3D</span>
         </button>
 
-        {/* 3. Museum Mini (Prominent Center Anchor) */}
-        <button
-          onClick={(e) => handleNavigate('museum', e)}
-          className={`flex flex-col items-center justify-center min-w-[58px] min-h-[48px] py-1 px-2 rounded-xl text-[11px] font-sans transition-all cursor-pointer ${
-            activeTab === 'museum'
-              ? 'text-amber-200 bg-amber-950/50 border border-amber-500/50 font-bold shadow-md'
-              : 'text-amber-300/80 hover:text-amber-200'
-          }`}
-        >
-          <div className="relative">
-            <Landmark className="w-5 h-5 mb-0.5 text-amber-300" />
-            <span className="absolute -top-1 -right-2 text-[8px] font-mono px-1 rounded-full bg-amber-500 text-museum-dark font-extrabold">
-              3D
-            </span>
-          </div>
-          <span>Museum</span>
-        </button>
-
-        {/* 4. Memori */}
+        {/* 3. Memori */}
         <button
           onClick={(e) => handleNavigate('memories', e)}
           className={`flex flex-col items-center justify-center min-w-[56px] min-h-[48px] py-1 px-2 rounded-lg text-[11px] font-sans transition-colors cursor-pointer ${
@@ -358,7 +328,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span>Memori</span>
         </button>
 
-        {/* 5. Menu Lainnya (Drawer Toggle) */}
+        {/* 4. Menu Lainnya (Drawer Toggle) */}
         <button
           onClick={(e) => {
             e.preventDefault();
@@ -403,7 +373,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="w-10 h-10 rounded-full flex items-center justify-center bg-museum-card hover:bg-museum-hover border border-museum-border text-stone-300 hover:text-parchment-100 cursor-pointer min-h-[40px] min-w-[40px]"
+                className="w-11 h-11 rounded-full flex items-center justify-center bg-museum-card hover:bg-museum-hover border border-museum-border text-stone-300 hover:text-parchment-100 cursor-pointer min-h-[44px] min-w-[44px]"
                 aria-label="Tutup Menu"
               >
                 <X className="w-5 h-5" />

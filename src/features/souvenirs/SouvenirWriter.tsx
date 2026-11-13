@@ -156,7 +156,7 @@ export const SouvenirWriter: React.FC<SouvenirWriterProps> = ({
 
               <div className="flex items-center gap-2 text-stone-500 text-xs font-mono">
                 <span className="h-px bg-stone-800 flex-1" />
-                <span>atau ketik path lokal</span>
+                <span>atau masukkan tautan foto/video</span>
                 <span className="h-px bg-stone-800 flex-1" />
               </div>
 
@@ -165,7 +165,7 @@ export const SouvenirWriter: React.FC<SouvenirWriterProps> = ({
                   type="text"
                   value={mediaUri}
                   onChange={e => setMediaUri(e.target.value)}
-                  placeholder="Contoh: /uploads/patung-bali.jpg atau URL foto/video"
+                  placeholder="Contoh: https://images.unsplash.com/... atau tautan web"
                   className="flex-1 bg-stone-950/80 border border-museum-border rounded-lg px-3 py-2 text-xs text-stone-100 placeholder-stone-600 focus:outline-none focus:border-earth-400 font-mono"
                 />
                 <select
