@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { X, Download, Upload, Shield, Lock, FileJson, AlertCircle, CheckCircle2, Database } from 'lucide-react';
 import { storageService } from '../../core/services/storageService';
 import { mediaStore } from '../../core/services/mediaStore';
@@ -73,13 +76,18 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       if (encryptExport) {
         const encrypted = await CryptoService.encryptData(plainJson, exportPassword);
         const blob = new Blob([JSON.stringify(encrypted, null, 2)], { type: 'application/json' });
-        downloadBlob(blob, `project-atlas-${dateStr}.atlas.enc`);
+        await downloadBlob(blob, `project-atlas-${dateStr}.atlas.enc`);
       } else {
         const blob = new Blob([plainJson], { type: 'application/json' });
-        downloadBlob(blob, `project-atlas-${dateStr}.json`);
+        await downloadBlob(blob, `project-atlas-${dateStr}.json`);
       }
 
-      setStatusMessage({ type: 'success', text: 'Archive exported successfully!' });
+      setStatusMessage({
+        type: 'success',
+        text: Capacitor.isNativePlatform()
+          ? 'Cadangan siap. Pilih tempat menyimpan di menu yang terbuka.'
+          : 'Archive exported successfully!',
+      });
       setTimeout(() => {
         onClose();
       }, 1500);
@@ -151,15 +159,55 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     }
   };
 
-  const downloadBlob = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Failed to read backup blob.'));
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        const comma = result.indexOf(',');
+        resolve(comma >= 0 ? result.slice(comma + 1) : '');
+      };
+      reader.readAsDataURL(blob);
+    });
+
+  const downloadBlob = async (blob: Blob, filename: string) => {
+    if (!Capacitor.isNativePlatform()) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    // Native path: write into the app cache (no storage permission needed),
+    // then hand the file to the system share sheet.
+    const text = await blob.text();
+    const isBinary = text.includes('\u0000') || text.includes('\uFFFD');
+    const data = isBinary ? await blobToBase64(blob) : text;
+
+    // Plugin v8 writes binary only when `encoding` is omitted and `data` is base64.
+    await Filesystem.writeFile({
+      path: filename,
+      data,
+      directory: Directory.Cache,
+      ...(isBinary ? {} : { encoding: Encoding.UTF8 }),
+    });
+
+    const { uri } = await Filesystem.getUri({
+      path: filename,
+      directory: Directory.Cache,
+    });
+
+    await Share.share({
+      title: filename,
+      files: [uri],
+      dialogTitle: 'Simpan atau bagikan cadangan Atlas',
+    });
   };
 
   return (
