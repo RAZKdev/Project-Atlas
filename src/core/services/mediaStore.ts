@@ -10,6 +10,36 @@ const STORE_NAME = 'media_blobs';
 export const MAX_MEDIA_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB per binary media
 const ALLOWED_MIME_PREFIXES = ['image/', 'video/', 'audio/'];
 
+export type MediaImportFailureReason = 'tipe-blob' | 'ukuran-blob' | 'fetch' | 'simpan';
+
+export interface MediaImportFailure {
+  reason: MediaImportFailureReason;
+  label: string;
+  count: number;
+  message: string;
+}
+
+export interface MediaImportReport {
+  total: number;
+  imported: number;
+  failed: number;
+  failures: MediaImportFailure[];
+}
+
+const MEDIA_IMPORT_FAILURE_LABELS: Record<MediaImportFailureReason, string> = {
+  'tipe-blob': 'Tipe blob ditolak',
+  'ukuran-blob': 'Ukuran blob ditolak',
+  fetch: 'Fetch gagal',
+  simpan: 'Simpan gagal',
+};
+
+const classifyMediaSaveError = (err: unknown): MediaImportFailureReason => {
+  const message = err instanceof Error ? err.message : String(err);
+  if (message.startsWith('Ukuran berkas (')) return 'ukuran-blob';
+  if (message.startsWith('Tipe berkas ')) return 'tipe-blob';
+  return 'simpan';
+};
+
 class MediaStore {
   private dbPromise: Promise<IDBDatabase> | null = null;
   private urlCache: Map<string, string> = new Map();
@@ -322,27 +352,63 @@ class MediaStore {
   /**
    * Import media blobs from archive into IndexedDB.
    */
-  public async importMediaBlobs(records: Array<{ id: string; name: string; mimeType: string; dataUrl: string }>): Promise<number> {
-    if (!records || !Array.isArray(records) || records.length === 0 || typeof indexedDB === 'undefined') return 0;
+  public async importMediaBlobs(records: Array<{ id: string; name: string; mimeType: string; dataUrl: string }>): Promise<MediaImportReport> {
+    const emptyReport: MediaImportReport = { total: 0, imported: 0, failed: 0, failures: [] };
+    if (!records || !Array.isArray(records) || records.length === 0 || typeof indexedDB === 'undefined') return emptyReport;
     try {
       const db = await this.getDB();
+      const items = records.filter(item => item && item.dataUrl && item.id);
       let importedCount = 0;
+      const failureTotals = new Map<MediaImportFailureReason, { count: number; message: string }>();
 
-      for (const item of records) {
-        if (!item || !item.dataUrl || !item.id) continue;
+      const recordFailure = (reason: MediaImportFailureReason, message: string) => {
+        const current = failureTotals.get(reason);
+        if (current) {
+          current.count++;
+        } else {
+          failureTotals.set(reason, { count: 1, message });
+        }
+      };
+
+      for (const item of items) {
+        let stage: 'fetch' | 'simpan' = 'fetch';
         try {
           const res = await fetch(item.dataUrl);
           const blob = await res.blob();
+          stage = 'simpan';
           const cleanId = item.id.replace(/^local-media:/, '');
           await this.saveMediaBlob(cleanId, blob, item.name);
           importedCount++;
         } catch (err) {
           console.warn('Gagal memulihkan sebagian media blob:', item.id, err);
+          const reason = stage === 'fetch' ? 'fetch' : classifyMediaSaveError(err);
+          recordFailure(reason, err instanceof Error ? err.message : String(err));
         }
       }
-      return importedCount;
-    } catch {
-      return 0;
+
+      const failures: MediaImportFailure[] = Array.from(failureTotals.entries()).map(([reason, entry]) => ({
+        reason,
+        label: MEDIA_IMPORT_FAILURE_LABELS[reason],
+        count: entry.count,
+        message: entry.message,
+      }));
+
+      return {
+        total: items.length,
+        imported: importedCount,
+        failed: failures.reduce((sum, failure) => sum + failure.count, 0),
+        failures,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        total: records.length,
+        imported: 0,
+        failed: records.length,
+        failures: records.length > 0
+          ? [{ reason: 'simpan', label: MEDIA_IMPORT_FAILURE_LABELS.simpan, count: records.length, message }]
+          : [],
+      };
     }
   }
 }

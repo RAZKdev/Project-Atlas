@@ -255,7 +255,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-full overflow-x-hidden pt-8 pb-24 lg:pb-0">
+      <main className="flex-1 w-full max-w-full overflow-x-hidden pt-8 pb-24 lg:pb-0 [@media(orientation:landscape)_and_(max-height:500px)_and_(pointer:coarse)]:pt-0 [@media(orientation:landscape)_and_(max-height:500px)_and_(pointer:coarse)]:pb-0">
         <Suspense
           fallback={
             <div

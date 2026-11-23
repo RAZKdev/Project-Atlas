@@ -148,10 +148,10 @@ export const AtlasPage: React.FC<AtlasPageProps> = ({
   };
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 [@media(orientation:landscape)_and_(max-height:500px)_and_(pointer:coarse)]:space-y-0 [@media(orientation:landscape)_and_(max-height:500px)_and_(pointer:coarse)]:px-0">
       
       {/* Header and Controls */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-museum-border pb-6">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-museum-border pb-6 [@media(orientation:landscape)_and_(max-height:500px)_and_(pointer:coarse)]:hidden">
         <div>
           <div className="flex items-center gap-2 text-xs font-mono text-earth-400 mb-1">
             <Globe className="w-3.5 h-3.5" />
@@ -206,7 +206,7 @@ export const AtlasPage: React.FC<AtlasPageProps> = ({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between bg-museum-surface/80 p-4 rounded-xl border border-museum-border">
+      <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between bg-museum-surface/80 p-4 rounded-xl border border-museum-border [@media(orientation:landscape)_and_(max-height:500px)_and_(pointer:coarse)]:hidden">
         
         {/* Search */}
         <div className="relative flex-1">

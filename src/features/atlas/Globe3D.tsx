@@ -1231,7 +1231,7 @@ export const Globe3D: React.FC<Globe3DProps> = ({
   };
 
   return (
-    <div className="relative w-full rounded-2xl border border-museum-border bg-[#0b0f14] overflow-hidden shadow-2xl select-none">
+    <div className="relative w-full rounded-2xl border border-museum-border bg-[#0b0f14] overflow-hidden shadow-2xl select-none [@media(orientation:landscape)_and_(max-height:500px)_and_(pointer:coarse)]:rounded-none [@media(orientation:landscape)_and_(max-height:500px)_and_(pointer:coarse)]:border-0">
       
       {/* TOP CONTROL BAR & FILTERS */}
       <div className="absolute top-0 left-0 right-0 z-20 p-3 sm:p-4 bg-gradient-to-b from-[#0b0f14]/95 via-[#0b0f14]/80 to-transparent flex flex-wrap items-center justify-between gap-3 pointer-events-auto">
@@ -1303,7 +1303,7 @@ export const Globe3D: React.FC<Globe3DProps> = ({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         onWheel={handleWheel}
-        className="w-full h-[540px] sm:h-[640px] cursor-grab active:cursor-grabbing touch-none"
+        className="w-full h-[540px] sm:h-[640px] [@media(orientation:landscape)_and_(max-height:500px)_and_(pointer:coarse)]:h-[100dvh] cursor-grab active:cursor-grabbing touch-none"
         style={{ touchAction: 'none', WebkitUserSelect: 'none' }}
       />
 

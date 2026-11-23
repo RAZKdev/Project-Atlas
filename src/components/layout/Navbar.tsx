@@ -114,7 +114,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full border-b border-museum-border bg-museum-base/90 backdrop-blur-md transition-all">
+      <header className="sticky top-0 z-40 w-full border-b border-museum-border bg-museum-base/90 backdrop-blur-md transition-all [@media(orientation:landscape)_and_(max-height:500px)_and_(pointer:coarse)]:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           
           {/* Brand / Logo */}
@@ -291,7 +291,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* ── MOBILE TOUCH BOTTOM BAR (Fixed & Accessible) ────────────────────── */}
       <nav 
-        className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-museum-border bg-museum-surface px-2 py-1.5 flex items-center justify-around shadow-2xl"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-museum-border bg-museum-surface px-2 py-1.5 flex items-center justify-around shadow-2xl [@media(orientation:landscape)_and_(max-height:500px)_and_(pointer:coarse)]:hidden"
         aria-label="Navigasi Seluler"
         style={{ WebkitTransform: 'translateZ(0)' }}
       >

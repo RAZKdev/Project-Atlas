@@ -4,6 +4,7 @@ import { Country, MediaReference, Memory } from '../../core/contracts';
 import { mediaStore } from '../../core/services/mediaStore';
 import { ArchivalMedia } from '../../components/ui/ArchivalMedia';
 import { Button } from '../../components/ui/Button';
+import { todayLocalISO } from '../../core/utils/localDate';
 
 interface JournalWriterProps {
   countries: Country[];
@@ -30,7 +31,7 @@ export const JournalWriter: React.FC<JournalWriterProps> = ({
   const [title, setTitle] = useState('');
   const [countryCode, setCountryCode] = useState('ID');
   const [placeName, setPlaceName] = useState('');
-  const [dateStart, setDateStart] = useState(new Date().toISOString().split('T')[0]);
+  const [dateStart, setDateStart] = useState(todayLocalISO());
   const [selectedMood, setSelectedMood] = useState('sunny');
   const [content, setContent] = useState('');
   const [mediaUri, setMediaUri] = useState('');
@@ -50,7 +51,7 @@ export const JournalWriter: React.FC<JournalWriterProps> = ({
           setTitle(parsed.title || '');
           setCountryCode(parsed.countryCode || 'ID');
           setPlaceName(parsed.placeName || '');
-          setDateStart(parsed.dateStart || new Date().toISOString().split('T')[0]);
+          setDateStart(parsed.dateStart || todayLocalISO());
           setSelectedMood(parsed.selectedMood || 'sunny');
           setContent(parsed.content || '');
           setMediaUri(parsed.mediaUri || '');

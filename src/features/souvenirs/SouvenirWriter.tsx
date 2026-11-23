@@ -4,6 +4,7 @@ import { Country, MediaReference, Memory, Souvenir } from '../../core/contracts'
 import { mediaStore } from '../../core/services/mediaStore';
 import { ArchivalMedia } from '../../components/ui/ArchivalMedia';
 import { Button } from '../../components/ui/Button';
+import { todayLocalISO } from '../../core/utils/localDate';
 
 interface SouvenirWriterProps {
   countries: Country[];
@@ -32,7 +33,7 @@ export const SouvenirWriter: React.FC<SouvenirWriterProps> = ({
   const [category, setCategory] = useState<Souvenir['category']>('artifact');
   const [countryCode, setCountryCode] = useState('ID');
   const [placeName, setPlaceName] = useState('');
-  const [acquiredDate, setAcquiredDate] = useState(new Date().toISOString().split('T')[0]);
+  const [acquiredDate, setAcquiredDate] = useState(todayLocalISO());
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
   const [selectedMemoryId, setSelectedMemoryId] = useState<string>('');

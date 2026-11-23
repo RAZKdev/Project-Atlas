@@ -6,6 +6,7 @@ import { storageService } from '../../core/services/storageService';
 import { ArchivalMedia } from '../../components/ui/ArchivalMedia';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { todayLocalISO } from '../../core/utils/localDate';
 
 interface VideoTheaterPageProps {
   memories: Memory[];
@@ -136,7 +137,7 @@ export const VideoTheaterPage: React.FC<VideoTheaterPageProps> = ({
         title: videoTitle,
         countryCode: 'ID',
         placeName: placeName,
-        dateStart: new Date().toISOString().split('T')[0],
+        dateStart: todayLocalISO(),
         summary: `Rekaman video perjalanan di ${placeName}.`,
         notes: `Klip video resolusi asli diunggah dari laptop: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB).`,
         tags: ['video', 'sinematik', 'arsip-lokal'],
@@ -147,7 +148,7 @@ export const VideoTheaterPage: React.FC<VideoTheaterPageProps> = ({
           uri: mediaKey,
           caption: videoTitle,
           isPersonal: true,
-          date: new Date().toISOString().split('T')[0],
+          date: todayLocalISO(),
           countryCode: 'ID',
         },
         mediaReferences: [
@@ -157,7 +158,7 @@ export const VideoTheaterPage: React.FC<VideoTheaterPageProps> = ({
             uri: mediaKey,
             caption: videoTitle,
             isPersonal: true,
-            date: new Date().toISOString().split('T')[0],
+            date: todayLocalISO(),
             countryCode: 'ID',
           }
         ],

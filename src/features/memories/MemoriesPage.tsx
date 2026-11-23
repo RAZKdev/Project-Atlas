@@ -5,6 +5,41 @@ import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ArchivalMedia } from '../../components/ui/ArchivalMedia';
 
+type MemorySortMode = 'newest' | 'oldest' | 'az' | 'za';
+
+const sortMemories = (list: Memory[], mode: MemorySortMode): Memory[] => {
+  const withDate = list.filter(m => Boolean(m.dateStart));
+  const withoutDate = list.filter(m => !m.dateStart);
+
+  const byTitle = (a: Memory, b: Memory) =>
+    a.title.localeCompare(b.title, 'id', { sensitivity: 'base' });
+  const byDateAsc = (a: Memory, b: Memory) => a.dateStart.localeCompare(b.dateStart);
+
+  const sortedWithDate = [...withDate].sort((a, b) => {
+    switch (mode) {
+      case 'oldest':
+        return byDateAsc(a, b);
+      case 'az':
+        return byTitle(a, b);
+      case 'za':
+        return byTitle(b, a);
+      case 'newest':
+      default:
+        return byDateAsc(b, a);
+    }
+  });
+
+  if (mode !== 'az' && mode !== 'za') {
+    return [...sortedWithDate, ...withoutDate];
+  }
+
+  const sortedWithoutDate = [...withoutDate].sort((a, b) =>
+    mode === 'az' ? byTitle(a, b) : byTitle(b, a)
+  );
+
+  return [...sortedWithDate, ...sortedWithoutDate];
+};
+
 interface MemoriesPageProps {
   memories: Memory[];
   countries: Country[];
@@ -21,6 +56,7 @@ export const MemoriesPage: React.FC<MemoriesPageProps> = ({
   const [search, setSearch] = useState('');
   const [selectedTag, setSelectedTag] = useState<string>('all');
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [sortMode, setSortMode] = useState<MemorySortMode>('newest');
 
   // Extract all unique tags
   const allTags = useMemo(() => {
@@ -31,7 +67,7 @@ export const MemoriesPage: React.FC<MemoriesPageProps> = ({
 
   // Filter memories
   const filteredMemories = useMemo(() => {
-    return memories.filter(m => {
+    const filtered = memories.filter(m => {
       const matchSearch = m.title.toLowerCase().includes(search.toLowerCase()) ||
                           m.placeName.toLowerCase().includes(search.toLowerCase()) ||
                           m.summary.toLowerCase().includes(search.toLowerCase());
@@ -39,7 +75,8 @@ export const MemoriesPage: React.FC<MemoriesPageProps> = ({
       const matchFav = !onlyFavorites || m.favorite;
       return matchSearch && matchTag && matchFav;
     });
-  }, [memories, search, selectedTag, onlyFavorites]);
+    return sortMemories(filtered, sortMode);
+  }, [memories, search, selectedTag, onlyFavorites, sortMode]);
 
   const getCountryName = (code: string) => {
     return countries.find(c => c.code === code)?.name || code;
@@ -102,6 +139,19 @@ export const MemoriesPage: React.FC<MemoriesPageProps> = ({
             ))}
           </div>
         )}
+
+        {/* Sort */}
+        <select
+          value={sortMode}
+          onChange={e => setSortMode(e.target.value as MemorySortMode)}
+          aria-label="Urutkan memori"
+          className="bg-museum-card border border-museum-border rounded-md px-3 py-1.5 text-xs text-parchment-100 font-mono focus:outline-none focus:border-earth-500/50 cursor-pointer"
+        >
+          <option value="newest">Terbaru → Lama</option>
+          <option value="oldest">Lama → Terbaru</option>
+          <option value="az">Judul A–Z</option>
+          <option value="za">Judul Z–A</option>
+        </select>
 
         {/* Favorite toggle */}
         <button

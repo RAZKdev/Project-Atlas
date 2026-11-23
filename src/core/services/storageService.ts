@@ -2,7 +2,7 @@ import { Country, Memory, Souvenir, AtlasStats } from '../contracts';
 import { INITIAL_COUNTRIES } from '../../data/countries';
 import { SEED_MEMORIES, INITIAL_UPDATED_COUNTRIES } from '../../data/seedData';
 import { CANONICAL_COUNTRIES } from '../../atlas/countries/canonicalCountries';
-import { mediaStore } from './mediaStore';
+import { mediaStore, MediaImportReport } from './mediaStore';
 
 const STORAGE_KEYS = {
   COUNTRIES: 'project_atlas_countries_v1',
@@ -325,7 +325,7 @@ class StorageService {
   public async importBackupArchive(
     rawJson: string,
     mode: 'merge' | 'replace' = 'merge'
-  ): Promise<{ memoriesCount: number; countriesCount: number; mediaCount: number }> {
+  ): Promise<{ memoriesCount: number; countriesCount: number; mediaCount: number; mediaReport: MediaImportReport }> {
     // Step 1: Parse
     let data: any;
     try {
@@ -414,9 +414,11 @@ class StorageService {
 
       // Step 5: Restore Media Blobs if present
       let importedMediaCount = 0;
+      let importedMediaReport: MediaImportReport = { total: 0, imported: 0, failed: 0, failures: [] };
       if (Array.isArray(data.mediaBlobs) && data.mediaBlobs.length > 0 && typeof window !== 'undefined') {
         try {
-          importedMediaCount = await mediaStore.importMediaBlobs(data.mediaBlobs);
+          importedMediaReport = await mediaStore.importMediaBlobs(data.mediaBlobs);
+          importedMediaCount = importedMediaReport.imported;
         } catch (mediaErr) {
           console.warn('Gagal memulihkan sebagian media blob:', mediaErr);
         }
@@ -432,6 +434,7 @@ class StorageService {
         memoriesCount: this.memories.length,
         countriesCount: this.countries.filter(c => c.status === 'documented').length,
         mediaCount: importedMediaCount,
+        mediaReport: importedMediaReport,
       };
     } catch (transactionErr) {
       // Step 7: Rollback to Safety Checkpoint on failure

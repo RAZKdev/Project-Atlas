@@ -6,6 +6,7 @@ import { mediaStore } from '../../core/services/mediaStore';
 import { ArchivalMedia } from '../../components/ui/ArchivalMedia';
 import { useModalFocusTrap } from '../../core/hooks/useModalFocusTrap';
 import { isValidMediaUrl, sanitizePlainText } from '../../core/utils/securityUtils';
+import { todayLocalISO } from '../../core/utils/localDate';
 
 interface MemoryFormModalProps {
   isOpen: boolean;
@@ -76,7 +77,7 @@ export const MemoryFormModal: React.FC<MemoryFormModalProps> = ({
       setTitle('');
       setCountryCode(prefilledCountryCode || 'ID');
       setPlaceName('');
-      setDateStart(new Date().toISOString().split('T')[0]);
+      setDateStart(todayLocalISO());
       setDateEnd('');
       setSummary('');
       setNotes('');

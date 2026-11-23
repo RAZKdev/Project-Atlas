@@ -8,6 +8,7 @@ import { mediaStore } from '../../core/services/mediaStore';
 import { CryptoService, EncryptedPayload } from '../../core/services/cryptoService';
 import { Button } from '../../components/ui/Button';
 import { useModalFocusTrap } from '../../core/hooks/useModalFocusTrap';
+import { todayLocalISO } from '../../core/utils/localDate';
 
 interface BackupModalProps {
   isOpen: boolean;
@@ -51,7 +52,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   const [parsedRawData, setParsedRawData] = useState<string | null>(null);
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [isImporting, setIsImporting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string; details?: string[] } | null>(null);
 
   if (!isOpen) return null;
 
@@ -71,7 +72,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     try {
       setIsExporting(true);
       const plainJson = await storageService.createBackupArchive();
-      const dateStr = new Date().toISOString().split('T')[0];
+      const dateStr = todayLocalISO();
 
       if (encryptExport) {
         const encrypted = await CryptoService.encryptData(plainJson, exportPassword);
@@ -144,14 +145,21 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       }
 
       const res = await storageService.importBackupArchive(jsonContent, importMode);
+      const mediaReport = res.mediaReport;
+      const hasMediaFailures = mediaReport.failed > 0;
       setStatusMessage({
-        type: 'success',
-        text: `Archive imported! (${res.memoriesCount} memories in archive).`
+        type: hasMediaFailures ? 'warning' : 'success',
+        text: `Memori masuk: ${res.memoriesCount}. Foto dipulihkan: ${mediaReport.imported} dari ${mediaReport.total}. Gagal: ${mediaReport.failed}.`,
+        details: hasMediaFailures
+          ? mediaReport.failures.slice(0, 3).map(f => `${f.label} (${f.count}): ${f.message}`)
+          : undefined,
       });
       onSuccess();
-      setTimeout(() => {
-        onClose();
-      }, 1500);
+      if (!hasMediaFailures) {
+        setTimeout(() => {
+          onClose();
+        }, 1500);
+      }
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message || 'Import failed.' });
     } finally {
@@ -278,11 +286,20 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
         {/* Status notice */}
         {statusMessage && (
-          <div className={`px-6 py-3 text-xs flex items-center gap-2 ${
-            statusMessage.type === 'success' ? 'bg-moss-500/20 text-moss-300 border-b border-moss-500/30' : 'bg-red-950/40 text-red-300 border-b border-red-800/40'
+          <div className={`px-6 py-3 text-xs flex items-start gap-2 border-b ${
+            statusMessage.type === 'success'
+              ? 'bg-moss-500/20 text-moss-300 border-moss-500/30'
+              : statusMessage.type === 'warning'
+              ? 'bg-amber-500/15 text-amber-200 border-amber-500/40'
+              : 'bg-red-950/40 text-red-300 border-red-800/40'
           }`}>
-            {statusMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-            <span>{statusMessage.text}</span>
+            {statusMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />}
+            <div className="space-y-1">
+              <span className="block">{statusMessage.text}</span>
+              {statusMessage.details?.map((detail, index) => (
+                <span key={index} className="block opacity-90">• {detail}</span>
+              ))}
+            </div>
           </div>
         )}
 
