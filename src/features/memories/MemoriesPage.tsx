@@ -145,7 +145,7 @@ export const MemoriesPage: React.FC<MemoriesPageProps> = ({
           value={sortMode}
           onChange={e => setSortMode(e.target.value as MemorySortMode)}
           aria-label="Urutkan memori"
-          className="bg-museum-card border border-museum-border rounded-md px-3 py-1.5 text-xs text-parchment-100 font-mono focus:outline-none focus:border-earth-500/50 cursor-pointer"
+          className="bg-museum-card border border-museum-border rounded-md px-2.5 py-1 w-auto text-[11px] max-w-[11rem] text-parchment-100 font-mono focus:outline-none focus:border-earth-500/50 cursor-pointer"
         >
           <option value="newest">Terbaru → Lama</option>
           <option value="oldest">Lama → Terbaru</option>

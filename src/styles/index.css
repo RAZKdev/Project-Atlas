@@ -2,6 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Bundled webfonts (latin subset) — keep the app fully offline-first. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/playfair-display-latin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/playfair-display-italic-latin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/space-mono-400-latin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/space-mono-700-latin.woff2') format('woff2');
+}
+
 @layer base {
   html {
     color-scheme: dark;

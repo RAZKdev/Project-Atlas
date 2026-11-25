@@ -9,7 +9,7 @@
 Aplikasi ini menggabungkan dua sisi:
 
 - **Atlas:** peta dunia interaktif, katalog negara, dossier negara, dan status kunjungan.
-- **Museum:** ruang pameran 3D, arsip memori, jurnal, teater video, paspor penjelajah, dan kabinet suvenir.
+- **Museum:** arsip memori, jurnal, teater video, paspor penjelajah, dan kabinet suvenir; modul ruang pameran 3D sudah ada di repo tetapi belum diekspos di navigasi V1.
 
 ## 2. Kenapa Proyek Ini Dibuat
 
@@ -32,7 +32,7 @@ Project Atlas dibuat untuk:
 5. **Jurnal Perjalanan** — catatan kronologis dan reflektif yang terhubung ke memori dan negara.
 6. **Kabinet Suvenir** — galeri artefak fisik seperti kerajinan, tekstil, tiket, stempel, kartu pos, dan koin.
 7. **Teater Video** — halaman khusus untuk memutar dan mengelola video perjalanan.
-8. **Museum 3D** — ruang pameran interaktif berbasis Three.js dengan arsitektur, pencahayaan, ekshibisi, karakter, dan navigasi kamera.
+8. **Museum 3D (modul, belum dirutekan)** — ruang pameran interaktif berbasis Three.js dengan arsitektur, pencahayaan, ekshibisi, karakter, dan navigasi kamera. Kodenya ada di `src/features/museum/` dan tercakup pengujian, tetapi belum masuk navigasi V1; rute yang aktif adalah Beranda, Atlas 3D, Katalog Negara, Memori, Jurnal, Suvenir, Sinema, dan Tentang.
 9. **Paspor Penjelajah** — dossier bergaya paspor dengan cap visa, catatan perjalanan, dan sorotan suvenir pertama dari setiap memori; tombol `Print Dossier / Save as PDF` memakai `window.print()` dan pengguna memilih “Save as PDF” di dialog cetak browser (tidak ada ekspor PDF programatik).
 10. **Backup & Restore** — ekspor/impor seluruh arsip dalam JSON biasa atau terenkripsi AES-GCM 256-bit dengan derivasi PBKDF2.
 11. **Penyimpanan Media Lokal** — foto disimpan sebagai Blob di IndexedDB; File System Access API memungkinkan pemilihan file langsung dari perangkat.
@@ -94,17 +94,24 @@ npm run preview
 
 ## 7. Pengujian
 
-Repo ini tidak memiliki skrip `test` di `package.json`. Pengujian berupa file `.mjs` berbasis `node:test` di folder `tests/` dan dijalankan satu per satu, misalnya:
+Pengujian memakai `node:test`. Skrip `npm test` menjalankan seluruh file uji di folder `tests/` melalui `tsx`, sehingga modul TypeScript di `src/` bisa diimpor langsung tanpa loader tambahan.
 
 ```bash
-node --test tests/storage.test.mjs
-node --test tests/navigation.test.mjs
+npm test
 ```
 
-Sebagian pengujian (`atlas_3d_master`, `museum_*`, `search`, `security_a11y`) mengimpor modul TypeScript dari `src/` dan memerlukan loader/build tambahan; tanpa itu Node akan gagal menemukan modul `.js` yang sesuai. Pengujian yang tidak bergantung pada modul TypeScript dapat dijalankan langsung.
+Per 2026-11-24, suite berisi **119 tes di 15 file** dan semuanya lulus (`pass 119`, `fail 0`). Cakupannya mencakup dataset 195 negara, pencarian, penyimpanan dan rollback impor, enkripsi AES-GCM, batas ukuran media, sinkronisasi suvenir, PWA/service worker, aksesibilitas, serta mesin museum 3D.
+
+Pemeriksaan tipe dan build produksi dijalankan dengan:
+
+```bash
+npm run build
+```
 
 ## 8. Privasi, Atribusi & Lisensi
 
 - Data memori, jurnal, dan media pribadi disimpan di perangkat pengguna; tidak ada pengiriman data pribadi ke server eksternal. Gambar contoh dimuat dari Unsplash.
 - Foto contoh dari Unsplash digunakan sesuai ketentuan lisensi dan atribusi fotografer.
+- Font **Inter**, **Playfair Display**, dan **Space Mono** dibundel lokal di `public/fonts/` di bawah SIL Open Font License 1.1. Teks lisensi ada di `public/fonts/LICENSE.txt`; tidak ada permintaan font ke Google Fonts.
+- Service worker `v1.4` mem-precache shell aplikasi dan kelima file font, sehingga tampilan dasar dan tipografi tetap tersedia saat offline setelah kunjungan pertama.
 - Belum ada berkas lisensi kode di repo. Untuk penggunaan ulang, hubungi pemilik repo.

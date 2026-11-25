@@ -1,11 +1,11 @@
 /**
  * Service Worker: Project Atlas PWA Offline Shell
- * Version: project-atlas-v1.3
- * Upgraded from project-atlas-shell-v1.2 and project-atlas-runtime-v1.2
+ * Version: project-atlas-v1.4
+ * v1.4: self-hosted webfonts; no Google Fonts CDN dependency.
  */
 
-const CACHE_NAME = 'project-atlas-shell-v1.3';
-const RUNTIME_CACHE = 'project-atlas-runtime-v1.3';
+const CACHE_NAME = 'project-atlas-shell-v1.4';
+const RUNTIME_CACHE = 'project-atlas-runtime-v1.4';
 
 // Critical application shell assets to pre-cache on install
 const PRECACHE_ASSETS = [
@@ -14,6 +14,11 @@ const PRECACHE_ASSETS = [
   '/manifest.json',
   '/compass.svg',
   '/assets/earth-texture.jpg',
+  '/fonts/inter-latin.woff2',
+  '/fonts/playfair-display-latin.woff2',
+  '/fonts/playfair-display-italic-latin.woff2',
+  '/fonts/space-mono-400-latin.woff2',
+  '/fonts/space-mono-700-latin.woff2',
 ];
 
 // Install: Pre-cache critical application shell
@@ -79,9 +84,7 @@ self.addEventListener('fetch', (event) => {
     request.destination === 'style' ||
     request.destination === 'image' ||
     request.destination === 'font' ||
-    request.url.includes('/assets/') ||
-    request.url.includes('fonts.googleapis.com') ||
-    request.url.includes('fonts.gstatic.com');
+    request.url.includes('/assets/');
 
   if (isStaticAsset) {
     event.respondWith(

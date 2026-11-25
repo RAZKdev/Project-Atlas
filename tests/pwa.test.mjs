@@ -105,24 +105,61 @@ test('PWA Test 4: pwaService Lifecycle & Invariant State', async () => {
   unsubscribe();
 });
 
-test('PWA Test 5: Phase 1 (P1) Service Worker Font CDN Caching Strategy', () => {
+test('PWA Test 5: Service Worker Cache Version & Local Font Precache', () => {
   const swPath = path.join(ROOT_DIR, 'public', 'sw.js');
   const swContent = fs.readFileSync(swPath, 'utf8');
 
-  // Verify v1.2 versioning
-  assert.ok(swContent.includes('project-atlas-shell-v1.2'), 'sw.js should declare v1.2 shell cache');
-  assert.ok(swContent.includes('project-atlas-runtime-v1.2'), 'sw.js should declare v1.2 runtime cache');
+  const shellCache = swContent.match(/const CACHE_NAME = '([^']+)';/);
+  const runtimeCache = swContent.match(/const RUNTIME_CACHE = '([^']+)';/);
+  assert.equal(shellCache?.[1], 'project-atlas-shell-v1.4', 'sw.js must declare the v1.4 shell cache');
+  assert.equal(runtimeCache?.[1], 'project-atlas-runtime-v1.4', 'sw.js must declare the v1.4 runtime cache');
 
-  // Verify Google Fonts caching in static assets rule
-  assert.ok(swContent.includes('fonts.googleapis.com'), 'sw.js must intercept fonts.googleapis.com');
-  assert.ok(swContent.includes('fonts.gstatic.com'), 'sw.js must intercept fonts.gstatic.com');
+  // Fonts are bundled locally; the CDN must no longer be referenced.
+  assert.ok(!swContent.includes('fonts.googleapis.com'), 'sw.js must not depend on fonts.googleapis.com');
+  assert.ok(!swContent.includes('fonts.gstatic.com'), 'sw.js must not depend on fonts.gstatic.com');
+
+  const bundledFonts = [
+    'inter-latin.woff2',
+    'playfair-display-latin.woff2',
+    'playfair-display-italic-latin.woff2',
+    'space-mono-400-latin.woff2',
+    'space-mono-700-latin.woff2',
+  ];
+  for (const font of bundledFonts) {
+    assert.ok(swContent.includes(`/fonts/${font}`), `sw.js must precache /fonts/${font}`);
+  }
 });
 
-test('PWA Test 6: Phase 1 (P1) Offline Font Fallbacks in CSS', () => {
+test('PWA Test 6: Bundled Font Faces, Files & Offline Fallbacks', () => {
   const cssPath = path.join(ROOT_DIR, 'src', 'styles', 'index.css');
   const cssContent = fs.readFileSync(cssPath, 'utf8');
+  const html = fs.readFileSync(path.join(ROOT_DIR, 'index.html'), 'utf8');
 
-  // Verify comprehensive system font fallbacks
+  // Local @font-face declarations replace the Google Fonts stylesheet.
+  assert.ok(cssContent.includes('@font-face'), 'index.css must declare local @font-face rules');
+  assert.ok(!cssContent.includes('fonts.googleapis.com'), 'index.css must not reference Google Fonts');
+  assert.ok(!html.includes('fonts.googleapis.com'), 'index.html must not reference Google Fonts');
+  assert.ok(!html.includes('fonts.gstatic.com'), 'index.html must not preconnect to Google Fonts');
+
+  const bundledFonts = [
+    'inter-latin.woff2',
+    'playfair-display-latin.woff2',
+    'playfair-display-italic-latin.woff2',
+    'space-mono-400-latin.woff2',
+    'space-mono-700-latin.woff2',
+  ];
+  for (const font of bundledFonts) {
+    assert.ok(cssContent.includes(`url('/fonts/${font}')`), `index.css must load /fonts/${font}`);
+
+    const fontPath = path.join(ROOT_DIR, 'public', 'fonts', font);
+    assert.ok(fs.existsSync(fontPath), `${font} must exist on disk`);
+    const magic = fs.readFileSync(fontPath).subarray(0, 4).toString('ascii');
+    assert.equal(magic, 'wOF2', `${font} must be a valid WOFF2 file`);
+  }
+
+  assert.ok(fs.existsSync(path.join(ROOT_DIR, 'public', 'fonts', 'LICENSE.txt')), 'bundled fonts must ship their OFL license');
+
+  // Verify comprehensive system font fallbacks remain available.
   assert.ok(cssContent.includes('-apple-system'), 'body font stack must include -apple-system');
   assert.ok(cssContent.includes('BlinkMacSystemFont'), 'body font stack must include BlinkMacSystemFont');
   assert.ok(cssContent.includes('Georgia'), 'serif font stack must include Georgia');
