@@ -58,6 +58,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Third-party media (e.g. stock photo CDNs) must not enter our caches: entries
+  // would go stale forever and grow the runtime cache without a bound.
+  const isSameOrigin = new URL(request.url).origin === self.location.origin;
+  if (!isSameOrigin) {
+    return;
+  }
+
   // 1. Navigation requests (HTML page): Network-first with fallback to cached index.html
   if (request.mode === 'navigate') {
     event.respondWith(

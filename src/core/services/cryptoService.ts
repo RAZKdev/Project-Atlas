@@ -85,6 +85,76 @@ export class CryptoService {
     }
   }
 
+  public static async encryptZipBlob(
+    blob: Blob,
+    password: string,
+    iterations = 100000,
+    chunkSizeBytes = 4 * 1024 * 1024
+  ): Promise<Blob> {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const baseIv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await this.deriveKey(password, salt, iterations);
+    const total = blob.size;
+    const part = (n: number, len: number) => blob.slice(n, n + len);
+    const chunks: Uint8Array[] = [];
+    let chunkIdx = 0;
+    for (let off = 0; off < total; off += chunkSizeBytes) {
+      // Unique IV per chunk: increment the 96-bit counter (last 4 bytes as big-endian index)
+      const iv = new Uint8Array(baseIv);
+      for (let b = 0; b < 4; b++) {
+        iv[11 - b] = ((chunkIdx >> (b * 8)) & 0xff) ^ iv[11 - b];
+      }
+      chunks.push(
+        new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, await part(off, chunkSizeBytes).arrayBuffer()))
+      );
+      chunkIdx++;
+    }
+    const header = JSON.stringify({
+      version: '2.2-zipenc',
+      salt: this.bufferToBase64(salt),
+      iv: this.bufferToBase64(baseIv),
+      iterations,
+      kdf: 'PBKDF2-SHA-256',
+      chunkSize: chunkSizeBytes,
+      totalSize: total,
+      exportedAt: new Date().toISOString()
+    });
+    const headerBytes = new TextEncoder().encode(`${header}\n`);
+    const data = new Blob([headerBytes as unknown as BlobPart, ...chunks.map((c) => c as unknown as BlobPart)], { type: 'application/octet-stream' });
+    return data;
+  }
+
+  public static async decryptArchiveToBlob(blob: Blob, password: string): Promise<Blob> {
+    const head = new Uint8Array(await blob.slice(0, 4096).arrayBuffer());
+    const headStr = new TextDecoder().decode(head).replace(/\u0000+$/, '');
+    const nl = headStr.indexOf('\n');
+    if (nl < 0) throw new Error('Format arsip terenkripsi tidak dikenali.');
+    const meta = JSON.parse(headStr.slice(0, nl));
+    if (meta.version !== '2.2-zipenc') throw new Error('Format arsip terenkripsi tidak dikenali.');
+    const iterations = meta.iterations && meta.iterations > 0 ? meta.iterations : 100000;
+    const key = await this.deriveKey(password, this.base64ToBuffer(meta.salt), iterations);
+    const origLen = new TextEncoder().encode(`${headStr.slice(0, nl)}\n`).length;
+    const total = meta.totalSize;
+    const part = (n: number, len: number) => blob.slice(n, n + len);
+    const chunks: Blob[] = [];
+    let cipherOff = origLen;
+    for (let off = 0; off < total; off += meta.chunkSize) {
+      const ptLen = Math.min(meta.chunkSize, total - off);
+      const encLen = ptLen + 16; // GCM auth tag
+      const encPart = await part(cipherOff, encLen).arrayBuffer();
+      cipherOff += encLen;
+      // Reproduce per-chunk IV: same XOR counter scheme used in encryptZipBlob
+      const chunkIdx = Math.floor(off / meta.chunkSize);
+      const iv = new Uint8Array(this.base64ToBuffer(meta.iv));
+      for (let b = 0; b < 4; b++) {
+        iv[11 - b] = ((chunkIdx >> (b * 8)) & 0xff) ^ iv[11 - b];
+      }
+      const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv as any }, key, encPart as any);
+      chunks.push(new Blob([dec]));
+    }
+    return new Blob(chunks);
+  }
+
   public static async computeSha256(data: string): Promise<string> {
     const enc = new TextEncoder();
     const hashBuffer = await crypto.subtle.digest('SHA-256', enc.encode(data));

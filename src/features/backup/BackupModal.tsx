@@ -49,6 +49,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPassword, setImportPassword] = useState('');
   const [isEncryptedFile, setIsEncryptedFile] = useState(false);
+  const [isZipArchive, setIsZipArchive] = useState(false);
   const [parsedRawData, setParsedRawData] = useState<string | null>(null);
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [isImporting, setIsImporting] = useState(false);
@@ -71,16 +72,14 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
     try {
       setIsExporting(true);
-      const plainJson = await storageService.createBackupArchive();
+      const zipBlob = await storageService.createBackupArchiveZip();
       const dateStr = todayLocalISO();
 
       if (encryptExport) {
-        const encrypted = await CryptoService.encryptData(plainJson, exportPassword);
-        const blob = new Blob([JSON.stringify(encrypted, null, 2)], { type: 'application/json' });
+        const blob = await CryptoService.encryptZipBlob(zipBlob, exportPassword);
         await downloadBlob(blob, `project-atlas-${dateStr}.atlas.enc`);
       } else {
-        const blob = new Blob([plainJson], { type: 'application/json' });
-        await downloadBlob(blob, `project-atlas-${dateStr}.json`);
+        await downloadBlob(zipBlob, `project-atlas-${dateStr}.zip`);
       }
 
       setStatusMessage({
@@ -105,6 +104,19 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     if (!file) return;
 
     setImportFile(file);
+    setIsZipArchive(false);
+    setIsEncryptedFile(false);
+    setParsedRawData(null);
+
+    // ZIP binary: first 4 bytes = 0x50 0x4b 0x03 0x04 ('PK..')
+    const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+    const isZipBinary = head[0] === 0x50 && head[1] === 0x4b;
+    if (isZipBinary) {
+      setIsZipArchive(true);
+      return;
+    }
+
+    // JSON (old archive / encrypted ZIP header / plain)
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
@@ -112,39 +124,55 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       if (parsed.version === '2.0-enc') {
         setIsEncryptedFile(true);
         setParsedRawData(text);
+      } else if (parsed.version === '2.2-zipenc') {
+        setIsEncryptedFile(true);
+        setIsZipArchive(true);
       } else if (parsed.memories) {
-        setIsEncryptedFile(false);
         setParsedRawData(text);
       } else {
         setStatusMessage({ type: 'error', text: 'Unrecognized archive format.' });
         setImportFile(null);
-        setParsedRawData(null);
       }
     } catch {
       setStatusMessage({ type: 'error', text: 'Could not read file. Invalid JSON.' });
       setImportFile(null);
-      setParsedRawData(null);
     }
   };
 
   const handleImport = async () => {
-    if (!parsedRawData) return;
+    if (!parsedRawData && !isZipArchive) return;
     setStatusMessage(null);
     setIsImporting(true);
 
     try {
-      let jsonContent = parsedRawData;
-      if (isEncryptedFile) {
-        if (!importPassword) {
-          setStatusMessage({ type: 'error', text: 'Please enter the decryption password.' });
-          setIsImporting(false);
-          return;
+      let res;
+      if (isZipArchive && importFile) {
+        let zipBlob: Blob = importFile;
+        if (isEncryptedFile) {
+          if (!importPassword) {
+            setStatusMessage({ type: 'error', text: 'Please enter the decryption password.' });
+            setIsImporting(false);
+            return;
+          }
+          zipBlob = await CryptoService.decryptArchiveToBlob(importFile, importPassword);
         }
-        const payload: EncryptedPayload = JSON.parse(parsedRawData);
-        jsonContent = await CryptoService.decryptData(payload, importPassword);
+        res = await storageService.importZipArchive(zipBlob, importMode);
+      } else if (parsedRawData) {
+        let jsonContent = parsedRawData;
+        if (isEncryptedFile) {
+          if (!importPassword) {
+            setStatusMessage({ type: 'error', text: 'Please enter the decryption password.' });
+            setIsImporting(false);
+            return;
+          }
+          const payload: EncryptedPayload = JSON.parse(parsedRawData);
+          jsonContent = await CryptoService.decryptData(payload, importPassword);
+        }
+        res = await storageService.importBackupArchive(jsonContent, importMode);
+      } else {
+        return;
       }
 
-      const res = await storageService.importBackupArchive(jsonContent, importMode);
       const mediaReport = res.mediaReport;
       const hasMediaFailures = mediaReport.failed > 0;
       setStatusMessage({
@@ -188,22 +216,25 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Revoking synchronously aborts large downloads: the browser reads the blob
+      // asynchronously, so a 20+ MB archive ends up as a 0-byte file.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
       return;
     }
 
     // Native path: write into the app cache (no storage permission needed),
     // then hand the file to the system share sheet.
-    const text = await blob.text();
-    const isBinary = text.includes('\u0000') || text.includes('\uFFFD');
-    const data = isBinary ? await blobToBase64(blob) : text;
+    // ponytail: buffers the whole file (base64) in memory; fine for small archives.
+    // For multi-GB native export, stream to a server instead (web pivot) or add chunked writes.
+    const isJson = blob.type.includes('json') || filename.endsWith('.json');
+    const data = isJson ? await blob.text() : await blobToBase64(blob);
 
     // Plugin v8 writes binary only when `encoding` is omitted and `data` is base64.
     await Filesystem.writeFile({
       path: filename,
       data,
       directory: Directory.Cache,
-      ...(isBinary ? {} : { encoding: Encoding.UTF8 }),
+      ...(isJson ? { encoding: Encoding.UTF8 } : {}),
     });
 
     const { uri } = await Filesystem.getUri({
@@ -359,7 +390,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                   disabled={isExporting}
                   icon={<Download className="w-3.5 h-3.5" />}
                 >
-                  {isExporting ? 'Generating...' : encryptExport ? 'Export Encrypted (.atlas.enc)' : 'Export JSON (.json)'}
+                  {isExporting ? 'Generating...' : encryptExport ? 'Export Encrypted (.atlas.enc)' : 'Export Archive (.zip)'}
                 </Button>
               </div>
             </div>
@@ -372,7 +403,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               <div>
                 <input
                   type="file"
-                  accept=".json,.enc,.atlas.enc"
+                  accept=".json,.zip,.enc,.atlas.enc"
                   onChange={handleFileSelect}
                   className="w-full text-xs text-stone-400 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-mono file:bg-museum-card file:text-earth-300 hover:file:bg-museum-hover cursor-pointer"
                 />
@@ -394,7 +425,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                 </div>
               )}
 
-              {parsedRawData && (
+              {(parsedRawData || isZipArchive) && (
                 <div className="space-y-2 pt-2 border-t border-museum-border/50">
                   <label className="text-[11px] font-mono text-stone-400 block">Import Mode</label>
                   <div className="grid grid-cols-2 gap-2 text-xs">
@@ -426,7 +457,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                 <Button
                   variant="primary"
                   onClick={handleImport}
-                  disabled={!parsedRawData || isImporting}
+                  disabled={(!parsedRawData && !isZipArchive) || isImporting}
                   icon={<Upload className="w-3.5 h-3.5" />}
                 >
                   {isImporting ? 'Decrypting & Importing...' : 'Restore Archive'}

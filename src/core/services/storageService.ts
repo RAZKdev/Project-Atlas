@@ -3,6 +3,7 @@ import { INITIAL_COUNTRIES } from '../../data/countries';
 import { SEED_MEMORIES, INITIAL_UPDATED_COUNTRIES } from '../../data/seedData';
 import { CANONICAL_COUNTRIES } from '../../atlas/countries/canonicalCountries';
 import { mediaStore, MediaImportReport } from './mediaStore';
+import { zipStore, unzipStore } from './zipStore';
 
 const STORAGE_KEYS = {
   COUNTRIES: 'project_atlas_countries_v1',
@@ -296,32 +297,6 @@ class StorageService {
   }
 
   // --- V2: Backup & Restore with Atomic Staging & Rollback Protection ---
-  public async createBackupArchive(options: { includeMedia?: boolean } = { includeMedia: true }): Promise<string> {
-    let mediaBlobs: Array<{ id: string; name: string; mimeType: string; dataUrl: string }> | undefined = undefined;
-    if (options.includeMedia && typeof window !== 'undefined') {
-      try {
-        const exported = await mediaStore.exportAllMediaBlobs();
-        if (exported.length > 0) {
-          mediaBlobs = exported;
-        }
-      } catch (err) {
-        console.warn('Could not export media blobs for archive:', err);
-      }
-    }
-
-    const backup = {
-      version: '2.1',
-      exportedAt: new Date().toISOString(),
-      appName: 'Project Atlas',
-      stats: this.getStats(),
-      countries: this.countries.filter(c => c.status !== 'unknown'),
-      memories: this.memories,
-      souvenirs: this.souvenirs,
-      mediaBlobs,
-    };
-    return JSON.stringify(backup, null, 2);
-  }
-
   public async importBackupArchive(
     rawJson: string,
     mode: 'merge' | 'replace' = 'merge'
@@ -459,6 +434,158 @@ class StorageService {
     this.memories = [];
     this.souvenirs = [];
     this.save();
+  }
+
+  // --- V2.2: ZIP streaming archive (constant memory, no giant base64/JSON strings) ---
+
+  public async createBackupArchiveZip(options: { includeMedia?: boolean } = { includeMedia: true }): Promise<Blob> {
+    const encoder = new TextEncoder();
+    const entries: { name: string; data: Uint8Array }[] = [];
+    entries.push({
+      name: 'atlas.json',
+      data: encoder.encode(
+        JSON.stringify(
+          {
+            version: '2.2',
+            exportedAt: new Date().toISOString(),
+            appName: 'Project Atlas',
+            stats: this.getStats(),
+            countries: this.countries.filter(c => c.status !== 'unknown'),
+            memories: this.memories,
+            souvenirs: this.souvenirs,
+          },
+          null,
+          2
+        )
+      ),
+    });
+
+    if (options.includeMedia && typeof indexedDB !== 'undefined') {
+      const records = await mediaStore.exportMediaRecords();
+      const manifest: Array<{ file: string; id: string; name: string; mimeType: string }> = [];
+      for (let i = 0; i < records.length; i++) {
+        const rec = records[i];
+        const safeName = (rec.name || `media-${i}`).replace(/[\\/:*?"<>|]/g, '-');
+        const file = `media/${i}-${safeName}`;
+        entries.push({ name: file, data: new Uint8Array(await rec.blob.arrayBuffer()) });
+        manifest.push({ file, id: rec.id, name: rec.name, mimeType: rec.mimeType });
+      }
+      if (manifest.length > 0) {
+        entries.push({ name: 'media/manifest.json', data: encoder.encode(JSON.stringify(manifest, null, 2)) });
+      }
+    }
+    return zipStore(entries);
+  }
+
+  public async importZipArchive(
+    zipBlob: Blob,
+    mode: 'merge' | 'replace' = 'merge'
+  ): Promise<{ memoriesCount: number; countriesCount: number; mediaCount: number; mediaReport: MediaImportReport }> {
+    const entries = await unzipStore(zipBlob);
+    const metaEntry = entries.find(e => e.name === 'atlas.json');
+    if (!metaEntry) throw new Error('Format arsip tidak valid: atlas.json tidak ditemukan.');
+    const data = JSON.parse(await metaEntry.data.text());
+    if (!data || !Array.isArray(data.memories)) {
+      throw new Error('Format arsip tidak valid: Array memories tidak ditemukan.');
+    }
+
+    // Step 3: Safety checkpoint (in-memory transaction snapshot)
+    const originalCountries = JSON.parse(JSON.stringify(this.countries));
+    const originalMemories = JSON.parse(JSON.stringify(this.memories));
+    const originalSouvenirs = JSON.parse(JSON.stringify(this.souvenirs));
+
+    try {
+      let stagedCountries: Country[];
+      let stagedMemories: Memory[];
+      let stagedSouvenirs: Souvenir[];
+      if (mode === 'replace') {
+        stagedCountries = this.buildInitialCountries().map(c => ({ ...c, status: 'unknown' as const }));
+        stagedMemories = [...data.memories];
+        stagedSouvenirs = Array.isArray(data.souvenirs) ? [...data.souvenirs] : [];
+        if (Array.isArray(data.countries)) {
+          for (const incoming of data.countries) {
+            if (!incoming || !incoming.code) continue;
+            const idx = stagedCountries.findIndex(c => c.code.toUpperCase() === incoming.code.toUpperCase());
+            if (idx >= 0) stagedCountries[idx] = { ...stagedCountries[idx], ...incoming };
+          }
+        }
+      } else {
+        stagedCountries = JSON.parse(JSON.stringify(this.countries));
+        stagedMemories = [...this.memories];
+        stagedSouvenirs = [...this.souvenirs];
+        const existingMemIds = new Set(stagedMemories.map(m => m.id));
+        for (const mem of data.memories) {
+          if (!existingMemIds.has(mem.id)) { stagedMemories.push(mem); existingMemIds.add(mem.id); }
+        }
+        if (Array.isArray(data.countries)) {
+          for (const incoming of data.countries) {
+            if (!incoming || !incoming.code) continue;
+            const idx = stagedCountries.findIndex(c => c.code.toUpperCase() === incoming.code.toUpperCase());
+            if (idx >= 0) stagedCountries[idx] = { ...stagedCountries[idx], ...incoming };
+          }
+        }
+        if (Array.isArray(data.souvenirs)) {
+          const existingSouvIds = new Set(stagedSouvenirs.map(s => s.id));
+          for (const s of data.souvenirs) {
+            if (!existingSouvIds.has(s.id)) { stagedSouvenirs.push(s); existingSouvIds.add(s.id); }
+          }
+        }
+      }
+
+      let importedMediaCount = 0;
+      let importedMediaReport: MediaImportReport = { total: 0, imported: 0, failed: 0, failures: [] };
+      const mediaEntries = entries.filter(e => e.name.startsWith('media/') && e.name !== 'media/manifest.json');
+      if (mediaEntries.length > 0 && typeof indexedDB !== 'undefined') {
+        try {
+          const manifestEntry = entries.find(e => e.name === 'media/manifest.json');
+          let manifest: Array<{ file: string; id: string; name: string; mimeType: string }> | null = null;
+          if (manifestEntry) {
+            try { manifest = JSON.parse(await manifestEntry.data.text()); } catch { manifest = null; }
+          }
+          const failures = new Map<string, { label: string; count: number; message: string }>();
+          for (const me of mediaEntries) {
+            const blob = me.data;
+            const meta = manifest ? manifest.find(m => m.file === me.name) : undefined;
+            const cleanId = (meta ? meta.id : me.name.replace('media/', '').split('-')[0]).replace(/^local-media:/, '');
+            try {
+              await mediaStore.saveMediaBlob(cleanId, blob, meta ? meta.name : me.name);
+              importedMediaCount++;
+            } catch (err) {
+              const reason = err instanceof Error && err.message.startsWith('Ukuran berkas') ? 'ukuran-blob' : 'simpan';
+              const label = reason === 'ukuran-blob' ? 'Ukuran blob ditolak' : 'Simpan gagal';
+              const current = failures.get(reason);
+              if (current) current.count++;
+              else failures.set(reason, { label, count: 1, message: err instanceof Error ? err.message : String(err) });
+            }
+          }
+          importedMediaReport = {
+            total: mediaEntries.length,
+            imported: importedMediaCount,
+            failed: mediaEntries.length - importedMediaCount,
+            failures: Array.from(failures.entries()).map(([reason, e]) => ({ reason: reason as any, label: e.label, count: e.count, message: e.message })),
+          };
+        } catch (mediaErr) {
+          console.warn('Gagal memulihkan sebagian media blob:', mediaErr);
+        }
+      }
+
+      this.countries = stagedCountries;
+      this.memories = stagedMemories;
+      this.souvenirs = stagedSouvenirs;
+      this.save();
+      return {
+        memoriesCount: this.memories.length,
+        countriesCount: this.countries.filter(c => c.status === 'documented').length,
+        mediaCount: importedMediaCount,
+        mediaReport: importedMediaReport,
+      };
+    } catch (transactionErr) {
+      this.countries = originalCountries;
+      this.memories = originalMemories;
+      this.souvenirs = originalSouvenirs;
+      this.save();
+      throw transactionErr;
+    }
   }
 }
 

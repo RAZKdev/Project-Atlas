@@ -375,13 +375,13 @@ test('Test 10: P0 Safety - Version 2.1 Archive Format Encapsulates Media Blobs M
   assert.ok(parsed.mediaBlobs[0].dataUrl.startsWith('data:image/jpeg;base64,'));
 });
 
-test('Test 11: Phase 1 (P1) Guardrail - Media Store rejects blobs exceeding MAX_MEDIA_SIZE_BYTES (25 MB)', async () => {
+test('Test 11: Phase 1 (P1) Guardrail - Media Store rejects blobs exceeding MAX_MEDIA_SIZE_BYTES (100 MB)', async () => {
   const { MAX_MEDIA_SIZE_BYTES } = await import('../src/core/services/mediaStore.ts');
-  assert.equal(MAX_MEDIA_SIZE_BYTES, 25 * 1024 * 1024);
+  assert.equal(MAX_MEDIA_SIZE_BYTES, 100 * 1024 * 1024);
 
-  // Simulated oversized blob (30 MB)
+  // Simulated oversized blob (101 MB)
   const oversizedBlob = {
-    size: 30 * 1024 * 1024,
+    size: 101 * 1024 * 1024,
     type: 'image/jpeg'
   };
 
@@ -395,7 +395,7 @@ test('Test 11: Phase 1 (P1) Guardrail - Media Store rejects blobs exceeding MAX_
   function validateBlob(blob) {
     if (blob.size > MAX_MEDIA_SIZE_BYTES) {
       const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
-      throw new Error(`Ukuran berkas (${sizeMB} MB) melebihi batas maksimal 25 MB.`);
+      throw new Error(`Ukuran berkas (${sizeMB} MB) melebihi batas maksimal 100 MB.`);
     }
     if (blob.type && !ALLOWED_MIME_PREFIXES.some(prefix => blob.type.startsWith(prefix))) {
       throw new Error(`Tipe berkas '${blob.type}' tidak didukung. Hanya gambar, video, dan audio yang diizinkan.`);
@@ -403,7 +403,7 @@ test('Test 11: Phase 1 (P1) Guardrail - Media Store rejects blobs exceeding MAX_
     return true;
   }
 
-  assert.throws(() => validateBlob(oversizedBlob), /melebihi batas maksimal 25 MB/);
+  assert.throws(() => validateBlob(oversizedBlob), /melebihi batas maksimal 100 MB/);
   assert.throws(() => validateBlob(invalidTypeBlob), /tidak didukung/);
   assert.equal(validateBlob({ size: 5 * 1024 * 1024, type: 'image/png' }), true);
 });

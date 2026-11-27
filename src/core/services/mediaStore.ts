@@ -2,13 +2,53 @@
  * Local Media Store using IndexedDB.
  * Safely persists image Blobs picked from local hard drive without uploading to servers.
  */
+import { dataUrlToBlob } from './zipStore';
 
 const DB_NAME = 'ProjectAtlasMediaDB';
 const DB_VERSION = 1;
 const STORE_NAME = 'media_blobs';
 
-export const MAX_MEDIA_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB per binary media
+export const MAX_MEDIA_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB per binary media
 const ALLOWED_MIME_PREFIXES = ['image/', 'video/', 'audio/'];
+
+// Object URLs are never garbage collected on their own. Keep a bounded cache and
+// revoke evicted entries so long sessions do not leak blobs.
+export const MAX_CACHED_OBJECT_URLS = 64;
+
+export class MediaUrlCache {
+  private map = new Map<string, string>();
+
+  constructor(private revokeFn: (url: string) => void = (url) => URL.revokeObjectURL?.(url)) {}
+
+  public get(key: string): string | undefined {
+    return this.map.get(key);
+  }
+
+  public has(key: string): boolean {
+    return this.map.has(key);
+  }
+
+  public get size(): number {
+    return this.map.size;
+  }
+
+  public set(key: string, url: string): void {
+    this.revoke(key);
+    this.map.set(key, url);
+    while (this.map.size > MAX_CACHED_OBJECT_URLS) {
+      const oldest = this.map.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      this.revoke(oldest);
+    }
+  }
+
+  public revoke(key: string): void {
+    const url = this.map.get(key);
+    if (!url) return;
+    this.revokeFn(url);
+    this.map.delete(key);
+  }
+}
 
 export type MediaImportFailureReason = 'tipe-blob' | 'ukuran-blob' | 'fetch' | 'simpan';
 
@@ -42,7 +82,7 @@ const classifyMediaSaveError = (err: unknown): MediaImportFailureReason => {
 
 class MediaStore {
   private dbPromise: Promise<IDBDatabase> | null = null;
-  private urlCache: Map<string, string> = new Map();
+  private urlCache: MediaUrlCache = new MediaUrlCache();
 
   private getDB(): Promise<IDBDatabase> {
     if (this.dbPromise) return this.dbPromise;
@@ -71,7 +111,7 @@ class MediaStore {
     // Media guardrail: size ceiling (F-04)
     if (blob.size > MAX_MEDIA_SIZE_BYTES) {
       const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
-      throw new Error(`Ukuran berkas (${sizeMB} MB) melebihi batas maksimal 25 MB.`);
+      throw new Error(`Ukuran berkas (${sizeMB} MB) melebihi batas maksimal 100 MB.`);
     }
 
     // Media guardrail: allowed types
@@ -149,8 +189,7 @@ class MediaStore {
     if (!uri.startsWith('local-media:')) return;
 
     if (this.urlCache.has(uri)) {
-      URL.revokeObjectURL(this.urlCache.get(uri)!);
-      this.urlCache.delete(uri);
+      this.urlCache.revoke(uri);
     }
 
     const db = await this.getDB();
@@ -248,11 +287,19 @@ class MediaStore {
       input.multiple = multiple;
       input.style.display = 'none';
 
-      input.onchange = () => {
-        const files = Array.from(input.files || []);
-        document.body.removeChild(input);
+      let settled = false;
+      const finish = (files: File[]) => {
+        if (settled) return;
+        settled = true;
+        input.remove();
         resolve(files);
       };
+
+      input.onchange = () => finish(Array.from(input.files || []));
+      // Cancelling the dialog fires no change event. Without these guards the
+      // promise never settles and the input stays attached to the DOM.
+      input.oncancel = () => finish([]);
+      window.addEventListener('focus', () => setTimeout(() => finish([]), 500), { once: true });
 
       document.body.appendChild(input);
       input.click();
@@ -307,9 +354,9 @@ class MediaStore {
   }
 
   /**
-   * Export all media blobs as base64 data URLs for full archive backup.
+   * Export media records as raw Blobs (no base64, no giant string).
    */
-  public async exportAllMediaBlobs(): Promise<Array<{ id: string; name: string; mimeType: string; dataUrl: string }>> {
+  public async exportMediaRecords(): Promise<Array<{ id: string; name: string; mimeType: string; blob: Blob }>> {
     if (typeof indexedDB === 'undefined') return [];
     try {
       const db = await this.getDB();
@@ -317,30 +364,16 @@ class MediaStore {
         const tx = db.transaction(STORE_NAME, 'readonly');
         const store = tx.objectStore(STORE_NAME);
         const request = store.getAll();
-
-        request.onsuccess = async () => {
-          const records = request.result || [];
-          const exports: Array<{ id: string; name: string; mimeType: string; dataUrl: string }> = [];
-
-          for (const item of records) {
-            if (item && item.blob instanceof Blob) {
-              const dataUrl = await new Promise<string>((res) => {
-                const reader = new FileReader();
-                reader.onloadend = () => res((reader.result as string) || '');
-                reader.onerror = () => res('');
-                reader.readAsDataURL(item.blob);
-              });
-              if (dataUrl) {
-                exports.push({
-                  id: item.id,
-                  name: item.name || 'unnamed-media',
-                  mimeType: item.mimeType || item.blob.type,
-                  dataUrl,
-                });
-              }
-            }
-          }
-          resolve(exports);
+        request.onsuccess = () => {
+          const records = (request.result || []).filter((item: any) => item && item.blob instanceof Blob);
+          resolve(
+            records.map((item: any) => ({
+              id: item.id as string,
+              name: (item.name || 'unnamed-media') as string,
+              mimeType: (item.mimeType || item.blob.type || 'application/octet-stream') as string,
+              blob: item.blob as Blob,
+            }))
+          );
         };
         request.onerror = () => resolve([]);
       });
@@ -373,8 +406,7 @@ class MediaStore {
       for (const item of items) {
         let stage: 'fetch' | 'simpan' = 'fetch';
         try {
-          const res = await fetch(item.dataUrl);
-          const blob = await res.blob();
+          const blob = dataUrlToBlob(item.dataUrl);
           stage = 'simpan';
           const cleanId = item.id.replace(/^local-media:/, '');
           await this.saveMediaBlob(cleanId, blob, item.name);
