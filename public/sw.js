@@ -1,24 +1,28 @@
 /**
  * Service Worker: Project Atlas PWA Offline Shell
- * Version: project-atlas-v1.4
- * v1.4: self-hosted webfonts; no Google Fonts CDN dependency.
+ * Version: project-atlas-v1.5
+ * v1.5: path-agnostic caches (works from root or a subpath like /atlas/);
+ * cross-origin fetches never enter the runtime cache.
  */
 
-const CACHE_NAME = 'project-atlas-shell-v1.4';
-const RUNTIME_CACHE = 'project-atlas-runtime-v1.4';
+// Resolve every cache key relative to the SW's own directory so the shell
+// works deployed at "/" or a subpath ("/atlas/").
+const BASE = new URL('.', self.location.href).toString();
+
+const CACHE_NAME = 'project-atlas-shell-v1.5';
+const RUNTIME_CACHE = 'project-atlas-runtime-v1.5';
 
 // Critical application shell assets to pre-cache on install
 const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/compass.svg',
-  '/assets/earth-texture.jpg',
-  '/fonts/inter-latin.woff2',
-  '/fonts/playfair-display-latin.woff2',
-  '/fonts/playfair-display-italic-latin.woff2',
-  '/fonts/space-mono-400-latin.woff2',
-  '/fonts/space-mono-700-latin.woff2',
+  BASE + 'index.html',
+  BASE + 'manifest.json',
+  BASE + 'compass.svg',
+  BASE + 'assets/earth-texture.jpg',
+  BASE + 'fonts/inter-latin.woff2',
+  BASE + 'fonts/playfair-display-latin.woff2',
+  BASE + 'fonts/playfair-display-italic-latin.woff2',
+  BASE + 'fonts/space-mono-400-latin.woff2',
+  BASE + 'fonts/space-mono-700-latin.woff2',
 ];
 
 // Install: Pre-cache critical application shell
@@ -78,7 +82,7 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(async () => {
           const cache = await caches.open(CACHE_NAME);
-          const cachedIndex = await cache.match('/index.html');
+          const cachedIndex = await cache.match(BASE + 'index.html');
           return cachedIndex || Response.error();
         })
     );

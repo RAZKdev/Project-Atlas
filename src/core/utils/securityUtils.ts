@@ -18,12 +18,16 @@ export function isValidMediaUrl(url: string): boolean {
     return /^local-media:[a-zA-Z0-9_\-.:]+$/.test(trimmed);
   }
 
-  // Local static relative asset paths
+  // Local static relative asset paths (accept base-prefixed paths for subpath deployments, e.g. /atlas/assets/)
+  const basePrefix = (import.meta as any).env?.BASE_URL || '/';
   if (
     trimmed.startsWith('/assets/') ||
     trimmed.startsWith('/uploads/') ||
+    trimmed.startsWith(basePrefix + 'assets/') ||
+    trimmed.startsWith(basePrefix + 'uploads/') ||
     trimmed.startsWith('./') ||
-    trimmed === '/compass.svg'
+    trimmed === '/compass.svg' ||
+    trimmed === basePrefix + 'compass.svg'
   ) {
     return !trimmed.includes('..') && !trimmed.includes('\\');
   }

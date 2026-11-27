@@ -766,7 +766,7 @@ export const Globe3D: React.FC<Globe3DProps> = ({
     // Load high-resolution Earth texture
     const textureLoader = new THREE.TextureLoader();
     textureLoader.load(
-      '/assets/earth-texture.jpg',
+      import.meta.env.BASE_URL + 'assets/earth-texture.jpg',
       (loadedTexture) => {
         loadedTexture.colorSpace = THREE.SRGBColorSpace;
         earthMat.map = loadedTexture;

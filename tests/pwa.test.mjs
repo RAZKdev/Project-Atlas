@@ -15,8 +15,8 @@ test('PWA Test 1: Web App Manifest Schema & Invariants', () => {
   // Core PWA specification requirements
   assert.equal(manifest.name, 'Project Atlas — Arsip Pribadi & Museum Mini');
   assert.equal(manifest.short_name, 'Project Atlas');
-  assert.equal(manifest.start_url, '/');
-  assert.equal(manifest.scope, '/');
+  assert.equal(manifest.start_url, '/atlas/');
+  assert.equal(manifest.scope, '/atlas/');
   assert.equal(manifest.display, 'standalone');
   assert.equal(manifest.background_color, '#121110');
   assert.equal(manifest.theme_color, '#1c1917');
@@ -32,7 +32,8 @@ test('PWA Test 1: Web App Manifest Schema & Invariants', () => {
     assert.ok(icon.type, 'icon must declare type');
     assert.ok(icon.purpose, 'icon should declare purpose (any or maskable)');
 
-    const iconDiskPath = path.join(ROOT_DIR, 'public', icon.src.replace(/^\//, ''));
+    // Icon src is a base-absolute path ("/atlas/compass.svg"); strip the base prefix.
+    const iconDiskPath = path.join(ROOT_DIR, 'public', icon.src.replace(/^\/atlas\//, '').replace(/^\//, ''));
     assert.ok(fs.existsSync(iconDiskPath), `Icon file ${icon.src} must exist at ${iconDiskPath}`);
   }
 });
@@ -53,24 +54,24 @@ test('PWA Test 2: Service Worker (sw.js) Offline Shell Contract', () => {
   assert.ok(swContent.includes('skipWaiting()'), 'sw.js must invoke skipWaiting');
   assert.ok(swContent.includes('clients.claim()'), 'sw.js must claim active clients');
 
-  // Check navigation fallback for offline access
+  // Check navigation fallback for offline access (path-agnostic: BASE + 'index.html')
   assert.ok(swContent.includes("request.mode === 'navigate'"), 'sw.js must handle navigation requests');
-  assert.ok(swContent.includes("match('/index.html')"), 'sw.js must fall back to /index.html for offline navigation');
+  assert.ok(swContent.includes("match(BASE + 'index.html')"), 'sw.js must fall back to index.html for offline navigation');
 
-  // Verify precached assets exist on disk
+  // Verify precached assets exist on disk (declared as BASE + 'relative/path')
+  assert.ok(swContent.includes("const BASE = new URL('.', self.location.href).toString();"), 'sw.js must resolve cache keys relative to its own directory');
+
   const precacheMatch = swContent.match(/const PRECACHE_ASSETS = \[([\s\S]*?)\];/);
   assert.ok(precacheMatch, 'PRECACHE_ASSETS array must be defined');
 
-  const rawList = precacheMatch[1]
-    .split(',')
-    .map((s) => s.trim().replace(/['"]/g, ''))
-    .filter(Boolean);
+  const rawList = [...precacheMatch[1].matchAll(/BASE \+ '([^']+)'/g)].map((m) => m[1]);
+  assert.ok(rawList.length >= 2, 'PRECACHE_ASSETS must list the shell and at least one asset');
 
   for (const item of rawList) {
-    if (item === '/' || item === '/index.html') {
+    if (item === 'index.html') {
       assert.ok(fs.existsSync(path.join(ROOT_DIR, 'index.html')), 'Root index.html must exist');
     } else {
-      const diskPath = path.join(ROOT_DIR, 'public', item.replace(/^\//, ''));
+      const diskPath = path.join(ROOT_DIR, 'public', item);
       assert.ok(fs.existsSync(diskPath), `Precached asset ${item} must exist on disk at ${diskPath}`);
     }
   }
@@ -111,8 +112,8 @@ test('PWA Test 5: Service Worker Cache Version & Local Font Precache', () => {
 
   const shellCache = swContent.match(/const CACHE_NAME = '([^']+)';/);
   const runtimeCache = swContent.match(/const RUNTIME_CACHE = '([^']+)';/);
-  assert.equal(shellCache?.[1], 'project-atlas-shell-v1.4', 'sw.js must declare the v1.4 shell cache');
-  assert.equal(runtimeCache?.[1], 'project-atlas-runtime-v1.4', 'sw.js must declare the v1.4 runtime cache');
+  assert.equal(shellCache?.[1], 'project-atlas-shell-v1.5', 'sw.js must declare the v1.5 shell cache');
+  assert.equal(runtimeCache?.[1], 'project-atlas-runtime-v1.5', 'sw.js must declare the v1.5 runtime cache');
 
   // Fonts are bundled locally; the CDN must no longer be referenced.
   assert.ok(!swContent.includes('fonts.googleapis.com'), 'sw.js must not depend on fonts.googleapis.com');
@@ -126,7 +127,7 @@ test('PWA Test 5: Service Worker Cache Version & Local Font Precache', () => {
     'space-mono-700-latin.woff2',
   ];
   for (const font of bundledFonts) {
-    assert.ok(swContent.includes(`/fonts/${font}`), `sw.js must precache /fonts/${font}`);
+    assert.ok(swContent.includes(`'fonts/${font}'`), `sw.js must precache fonts/${font}`);
   }
 });
 
@@ -149,7 +150,9 @@ test('PWA Test 6: Bundled Font Faces, Files & Offline Fallbacks', () => {
     'space-mono-700-latin.woff2',
   ];
   for (const font of bundledFonts) {
-    assert.ok(cssContent.includes(`url('/fonts/${font}')`), `index.css must load /fonts/${font}`);
+    // CSS references fonts relative to the bundled stylesheet location so the
+    // app works at "/" or a subpath (e.g. "/atlas/"): url('../fonts/x.woff2').
+    assert.ok(cssContent.includes(`url('../fonts/${font}')`), `index.css must load ../fonts/${font}`);
 
     const fontPath = path.join(ROOT_DIR, 'public', 'fonts', font);
     assert.ok(fs.existsSync(fontPath), `${font} must exist on disk`);

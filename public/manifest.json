@@ -1,10 +1,10 @@
 {
-  "id": "/",
+  "id": "/atlas/",
   "name": "Project Atlas — Arsip Pribadi & Museum Mini",
   "short_name": "Project Atlas",
   "description": "Arsip perjalanan pribadi, atlas interaktif dunia 195 negara, dan museum mini 3D.",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "/atlas/",
+  "scope": "/atlas/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#121110",
@@ -12,13 +12,13 @@
   "categories": ["travel", "lifestyle", "education", "books"],
   "icons": [
     {
-      "src": "/compass.svg",
+      "src": "/atlas/compass.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/compass.svg",
+      "src": "/atlas/compass.svg",
       "sizes": "192x192 512x512",
       "type": "image/svg+xml",
       "purpose": "maskable"

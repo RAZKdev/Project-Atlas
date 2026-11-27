@@ -73,8 +73,10 @@ class PWAService {
 
     // Only register in supported secure or localhost context
     window.addEventListener('load', () => {
+      // Base URL is injected by Vite (e.g. "/atlas/" in production, "/" in dev).
+      const base = (import.meta as any).env?.BASE_URL || '/';
       navigator.serviceWorker
-        .register('/sw.js', { scope: '/' })
+        .register(base + 'sw.js', { scope: base })
         .then((registration) => {
           registration.addEventListener('updatefound', () => {
             const installingWorker = registration.installing;

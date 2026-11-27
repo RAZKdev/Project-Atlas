@@ -35,7 +35,7 @@ export const ASSET_MANIFEST: Record<string, AssetDefinition> = {
   explorer_character: {
     id: 'explorer_character',
     name: 'Explorer Avatar Rig',
-    url: '/assets/3d/characters/explorer.glb',
+    url: import.meta.env.BASE_URL + 'assets/3d/characters/explorer.glb',
     category: 'character',
     priority: 'hero',
     preload: true,
@@ -47,7 +47,7 @@ export const ASSET_MANIFEST: Record<string, AssetDefinition> = {
   cypress_tree: {
     id: 'cypress_tree',
     name: 'Italian Cypress Tree',
-    url: '/assets/3d/vegetation/cypress_tree.glb',
+    url: import.meta.env.BASE_URL + 'assets/3d/vegetation/cypress_tree.glb',
     category: 'vegetation',
     priority: 'secondary',
     preload: false,
@@ -57,7 +57,7 @@ export const ASSET_MANIFEST: Record<string, AssetDefinition> = {
   olive_tree: {
     id: 'olive_tree',
     name: 'Mediterranean Olive Tree',
-    url: '/assets/3d/vegetation/olive_tree.glb',
+    url: import.meta.env.BASE_URL + 'assets/3d/vegetation/olive_tree.glb',
     category: 'vegetation',
     priority: 'secondary',
     preload: false,
@@ -69,7 +69,7 @@ export const ASSET_MANIFEST: Record<string, AssetDefinition> = {
   hero_fountain: {
     id: 'hero_fountain',
     name: 'Classical Tiered Fountain',
-    url: '/assets/3d/environment/fountain.glb',
+    url: import.meta.env.BASE_URL + 'assets/3d/environment/fountain.glb',
     category: 'environment',
     priority: 'hero',
     preload: true,
@@ -81,7 +81,7 @@ export const ASSET_MANIFEST: Record<string, AssetDefinition> = {
   earth_texture: {
     id: 'earth_texture',
     name: 'Earth Cartographic Texture',
-    url: '/assets/earth-texture.jpg',
+    url: import.meta.env.BASE_URL + 'assets/earth-texture.jpg',
     category: 'textures',
     priority: 'hero',
     preload: true,
